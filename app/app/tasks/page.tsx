@@ -25,7 +25,7 @@ import { formatRelativeTime } from '@/lib/utils';
 import type { Task, Project } from '@/lib/types';
 
 export default function TasksPage() {
-  const { user, profile } = useAuth();
+  const { user, profile, loading: authLoading } = useAuth();
   const searchParams = useSearchParams();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -39,7 +39,7 @@ export default function TasksPage() {
   const [profiles, setProfiles] = useState<{ id: string; full_name: string | null; email: string }[]>([]);
 
   const fetchTasks = useCallback(async () => {
-    if (!user) return;
+    if (!user || authLoading) return;
 
     let projectIds: string[] = [];
     if (profile?.role === 'super_admin') {
@@ -74,7 +74,7 @@ export default function TasksPage() {
     setProfiles((profilesData as { id: string; full_name: string | null; email: string }[]) ?? []);
 
     setLoading(false);
-  }, [user, profile]);
+  }, [user, profile, authLoading]);
 
   useEffect(() => {
     fetchTasks();

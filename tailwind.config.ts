@@ -14,14 +14,17 @@ const config: Config = {
         'gradient-conic':
           'conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops))',
         'gradient-blue': 'linear-gradient(135deg, hsl(221 83% 53%), hsl(245 80% 60%))',
-        'gradient-green': 'linear-gradient(135deg, hsl(142 71% 45%), hsl(160 84% 39%))',
+        'gradient-green': 'linear-gradient(135deg, hsl(142 72% 29%), hsl(160 84% 39%))',
         'gradient-amber': 'linear-gradient(135deg, hsl(38 92% 50%), hsl(25 95% 53%))',
         'gradient-red': 'linear-gradient(135deg, hsl(0 84% 60%), hsl(340 75% 55%))',
+        'gradient-info': 'linear-gradient(135deg, hsl(200 98% 39%), hsl(190 90% 45%))',
       },
       borderRadius: {
         lg: 'var(--radius)',
         md: 'calc(var(--radius) - 2px)',
         sm: 'calc(var(--radius) - 4px)',
+        xl: 'calc(var(--radius) + 4px)',
+        '2xl': 'calc(var(--radius) + 8px)',
       },
       colors: {
         background: 'hsl(var(--background))',
@@ -62,9 +65,22 @@ const config: Config = {
           DEFAULT: 'hsl(var(--warning))',
           foreground: 'hsl(var(--warning-foreground))',
         },
+        info: {
+          DEFAULT: 'hsl(var(--info))',
+          foreground: 'hsl(var(--info-foreground))',
+        },
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',
         ring: 'hsl(var(--ring))',
+        sidebar: {
+          DEFAULT: 'hsl(var(--sidebar))',
+          foreground: 'hsl(var(--sidebar-foreground))',
+          muted: 'hsl(var(--sidebar-muted))',
+          'muted-foreground': 'hsl(var(--sidebar-muted-foreground))',
+          accent: 'hsl(var(--sidebar-accent))',
+          'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
+          border: 'hsl(var(--sidebar-border))',
+        },
         chart: {
           '1': 'hsl(var(--chart-1))',
           '2': 'hsl(var(--chart-2))',
@@ -80,6 +96,7 @@ const config: Config = {
         'elevated': 'var(--shadow-lg)',
         'floating': 'var(--shadow-xl)',
         'glow': 'var(--shadow-glow)',
+        'glow-lg': 'var(--shadow-glow-lg)',
       },
       keyframes: {
         'accordion-down': {
@@ -91,19 +108,27 @@ const config: Config = {
           to: { height: '0' },
         },
         'fade-in': {
-          from: { opacity: '0', transform: 'translateY(8px)' },
-          to: { opacity: '1', transform: 'translateY(0)' },
+          from: { opacity: '0' },
+          to: { opacity: '1' },
         },
         'fade-in-up': {
-          from: { opacity: '0', transform: 'translateY(16px)' },
+          from: { opacity: '0', transform: 'translateY(12px)' },
+          to: { opacity: '1', transform: 'translateY(0)' },
+        },
+        'fade-in-down': {
+          from: { opacity: '0', transform: 'translateY(-12px)' },
           to: { opacity: '1', transform: 'translateY(0)' },
         },
         'fade-in-scale': {
-          from: { opacity: '0', transform: 'scale(0.96)' },
+          from: { opacity: '0', transform: 'scale(0.95)' },
           to: { opacity: '1', transform: 'scale(1)' },
         },
         'slide-in-left': {
-          from: { opacity: '0', transform: 'translateX(-12px)' },
+          from: { opacity: '0', transform: 'translateX(-16px)' },
+          to: { opacity: '1', transform: 'translateX(0)' },
+        },
+        'slide-in-right': {
+          from: { opacity: '0', transform: 'translateX(16px)' },
           to: { opacity: '1', transform: 'translateX(0)' },
         },
         'shimmer': {
@@ -114,19 +139,42 @@ const config: Config = {
           '0%, 100%': { boxShadow: '0 0 0 0 hsl(var(--primary) / 0.3)' },
           '50%': { boxShadow: '0 0 0 6px hsl(var(--primary) / 0)' },
         },
+        'breathe': {
+          '0%, 100%': { transform: 'scale(1)', opacity: '0.6' },
+          '50%': { transform: 'scale(1.05)', opacity: '0.8' },
+        },
+        'float': {
+          '0%, 100%': { transform: 'translateY(0px)' },
+          '50%': { transform: 'translateY(-8px)' },
+        },
+        'spin-slow': {
+          from: { transform: 'rotate(0deg)' },
+          to: { transform: 'rotate(360deg)' },
+        },
+        'scale-pulse': {
+          '0%, 100%': { transform: 'scale(1)' },
+          '50%': { transform: 'scale(1.03)' },
+        },
       },
       animation: {
         'accordion-down': 'accordion-down 0.2s ease-out',
         'accordion-up': 'accordion-up 0.2s ease-out',
-        'fade-in': 'fade-in 0.3s ease-out',
-        'fade-in-up': 'fade-in-up 0.4s ease-out',
-        'fade-in-scale': 'fade-in-scale 0.25s ease-out',
-        'slide-in-left': 'slide-in-left 0.3s ease-out',
-        'shimmer': 'shimmer 1.5s infinite',
+        'fade-in': 'fade-in 0.2s ease-out',
+        'fade-in-up': 'fade-in-up 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
+        'fade-in-down': 'fade-in-down 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+        'fade-in-scale': 'fade-in-scale 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+        'slide-in-left': 'slide-in-left 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+        'slide-in-right': 'slide-in-right 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+        'shimmer': 'shimmer 1.5s ease-in-out infinite',
         'pulse-glow': 'pulse-glow 2s ease-in-out infinite',
+        'breathe': 'breathe 4s ease-in-out infinite',
+        'float': 'float 6s ease-in-out infinite',
+        'spin-slow': 'spin-slow 8s linear infinite',
+        'scale-pulse': 'scale-pulse 3s ease-in-out infinite',
       },
       transitionTimingFunction: {
         'spring': 'cubic-bezier(0.34, 1.56, 0.64, 1)',
+        'out-expo': 'cubic-bezier(0.16, 1, 0.3, 1)',
       },
     },
   },

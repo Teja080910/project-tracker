@@ -7,7 +7,7 @@ import { getRoleLabel } from '@/lib/constants';
 import { ThemeToggle } from '@/components/shared/theme-toggle';
 
 export default function SettingsPage() {
-  const { profile } = useAuth();
+  const { user, profile } = useAuth();
 
   return (
     <div className="max-w-2xl space-y-6">
@@ -36,7 +36,7 @@ export default function SettingsPage() {
         <CardContent className="space-y-3">
           <div className="flex items-center justify-between rounded-lg px-3 py-2 hover:bg-secondary/30 transition-colors duration-200">
             <span className="text-sm text-muted-foreground">Email</span>
-            <span className="text-sm font-medium">{profile?.email}</span>
+            <span className="text-sm font-medium">{profile?.email ?? user?.email}</span>
           </div>
           <div className="flex items-center justify-between rounded-lg px-3 py-2 hover:bg-secondary/30 transition-colors duration-200">
             <span className="text-sm text-muted-foreground">Role</span>

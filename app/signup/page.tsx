@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { Loader2, ArrowRight } from 'lucide-react';
+import { Loader2, ArrowRight, Mail, Lock, User, Eye, EyeOff } from 'lucide-react';
 
 function GoogleIcon() {
   return (
@@ -27,6 +27,7 @@ export default function SignupPage() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleGoogleSignIn = async () => {
     setGoogleLoading(true);
@@ -71,84 +72,109 @@ export default function SignupPage() {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center auth-bg px-4 relative overflow-hidden">
-      {/* Decorative blobs */}
-      <div className="absolute top-0 right-1/4 w-72 h-72 bg-chart-2/10 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '5s' }} />
-      <div className="absolute bottom-0 left-1/4 w-96 h-96 bg-primary/10 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '7s', animationDelay: '2s' }} />
+      {/* Decorative elements */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-40 -left-40 w-80 h-80 bg-chart-2/5 rounded-full blur-3xl animate-breathe" style={{ animationDelay: '1s' }} />
+        <div className="absolute -bottom-40 -right-40 w-96 h-96 bg-primary/5 rounded-full blur-3xl animate-breathe" style={{ animationDelay: '3s' }} />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-primary/[0.02] rounded-full blur-3xl animate-spin-slow" />
+      </div>
 
-      <div className="w-full max-w-sm space-y-6 relative animate-fade-in-up">
-        <div className="flex flex-col items-center gap-3">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-blue text-primary-foreground text-2xl font-bold shadow-card animate-fade-in-scale">
-            T
+      <div className="w-full max-w-sm space-y-6 relative">
+        {/* Logo & Header */}
+        <div className="flex flex-col items-center gap-4">
+          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-blue text-primary-foreground text-2xl font-bold shadow-glow-lg animate-fade-in-scale relative overflow-hidden">
+            <div className="absolute inset-0 bg-white/20 rounded-2xl animate-breathe" />
+            <span className="relative">T</span>
           </div>
-          <div className="text-center">
-            <h1 className="text-2xl font-semibold tracking-tight">Create account</h1>
-            <p className="text-sm text-muted-foreground mt-1">Get started with Trackflow</p>
+          <div className="text-center animate-fade-in-up">
+            <h1 className="text-2xl font-bold tracking-tight">Create account</h1>
+            <p className="text-sm text-muted-foreground mt-1.5">Get started with Trackflow</p>
           </div>
         </div>
 
-        <div className="rounded-xl border border-border bg-card/80 backdrop-blur-md shadow-elevated p-6 space-y-4 animate-fade-in-scale stagger-1">
+        {/* Form Card */}
+        <div className="rounded-2xl border border-border/60 bg-card/70 backdrop-blur-xl shadow-elevated p-6 space-y-5 animate-fade-in-up stagger-1">
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="name">Full name</Label>
-              <Input
-                id="name"
-                type="text"
-                placeholder="John Doe"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                required
-                className="h-11"
-              />
+              <Label htmlFor="name" className="text-sm font-medium">Full name</Label>
+              <div className="relative">
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="name"
+                  type="text"
+                  placeholder="John Doe"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  required
+                  className="h-11 pl-10 bg-secondary/50 border-border/60 focus-visible:bg-card transition-all duration-200"
+                />
+              </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                autoComplete="email"
-                className="h-11"
-              />
+              <Label htmlFor="email" className="text-sm font-medium">Email</Label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="you@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                  autoComplete="email"
+                  className="h-11 pl-10 bg-secondary/50 border-border/60 focus-visible:bg-card transition-all duration-200"
+                />
+              </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                placeholder="At least 6 characters"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                autoComplete="new-password"
-                className="h-11"
-              />
+              <Label htmlFor="password" className="text-sm font-medium">Password</Label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="At least 6 characters"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  autoComplete="new-password"
+                  className="h-11 pl-10 pr-10 bg-secondary/50 border-border/60 focus-visible:bg-card transition-all duration-200"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
-            <Button type="submit" className="w-full h-11 group" disabled={loading}>
-              {loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : (
-                <>
+            <Button type="submit" className="w-full h-11 group relative overflow-hidden" disabled={loading}>
+              <div className="absolute inset-0 bg-gradient-to-r from-primary to-primary/80 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+              {loading ? (
+                <Loader2 className="h-4 w-4 animate-spin relative" />
+              ) : (
+                <span className="relative flex items-center justify-center">
                   Create account
-                  <ArrowRight className="h-4 w-4 ml-2 transition-transform duration-200 group-hover:translate-x-0.5" />
-                </>
+                  <ArrowRight className="h-4 w-4 ml-2 transition-transform duration-200 group-hover:translate-x-1" />
+                </span>
               )}
             </Button>
           </form>
 
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-border" />
+              <div className="w-full border-t border-border/60" />
             </div>
             <div className="relative flex justify-center text-xs">
-              <span className="bg-card px-2 text-muted-foreground">or</span>
+              <span className="bg-card px-3 text-muted-foreground">or continue with</span>
             </div>
           </div>
 
           <Button
             type="button"
             variant="outline"
-            className="w-full h-11 gap-2"
+            className="w-full h-11 gap-2.5 border-border/60 hover:bg-secondary/80 hover:border-border transition-all duration-200"
             onClick={handleGoogleSignIn}
             disabled={googleLoading}
           >
@@ -157,14 +183,14 @@ export default function SignupPage() {
             ) : (
               <GoogleIcon />
             )}
-            Continue with Google
+            <span className="text-sm font-medium">Google</span>
           </Button>
 
           <p className="text-center text-sm text-muted-foreground">
             Already have an account?{' '}
             <button
               onClick={() => router.push('/login')}
-              className="text-primary font-medium hover:underline transition-colors duration-200"
+              className="text-primary font-semibold hover:underline transition-colors duration-200"
             >
               Sign in
             </button>

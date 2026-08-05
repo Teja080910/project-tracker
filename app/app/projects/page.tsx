@@ -30,7 +30,7 @@ export default function ProjectsPage() {
   const [search, setSearch] = useState('');
 
   const fetchProjects = useCallback(async () => {
-    if (!user) return;
+    if (!user || !profile) return;
     let query = supabase.from('projects').select('*').order('created_at', { ascending: false });
     if (profile?.role !== 'super_admin') {
       const { data: memberships } = await supabase

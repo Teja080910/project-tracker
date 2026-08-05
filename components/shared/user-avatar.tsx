@@ -13,9 +13,9 @@ interface UserAvatarProps {
 export function UserAvatar({ profile, className }: UserAvatarProps) {
   const initials = getInitials(profile?.full_name, profile?.email);
   return (
-    <Avatar className={cn('h-8 w-8', className)}>
+    <Avatar className={cn('h-8 w-8 ring-2 ring-background', className)}>
       {profile?.avatar_url && <AvatarImage src={profile.avatar_url} alt={profile.full_name ?? ''} />}
-      <AvatarFallback className="text-xs font-medium bg-secondary text-secondary-foreground">
+      <AvatarFallback className="text-xs font-medium bg-gradient-to-br from-primary/20 to-primary/10 text-primary">
         {initials}
       </AvatarFallback>
     </Avatar>

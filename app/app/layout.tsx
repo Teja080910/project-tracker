@@ -19,18 +19,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   if (loading) {
     return (
-      <div className="flex h-screen">
-        <Skeleton className="w-60 hidden md:block" />
+      <div className="flex h-screen bg-background">
+        <Skeleton className="w-60 hidden md:block rounded-none" />
         <div className="flex-1 flex flex-col">
-          <Skeleton className="h-14" />
+          <Skeleton className="h-14 rounded-none" />
           <div className="flex-1 p-6 space-y-4">
-            <Skeleton className="h-8 w-48 animate-fade-in-up" />
+            <Skeleton className="h-8 w-48" />
             <div className="grid grid-cols-4 gap-4">
               {Array.from({ length: 4 }).map((_, i) => (
-                <Skeleton key={i} className={`h-24 animate-fade-in-up stagger-${i + 1}`} />
+                <Skeleton key={i} className={`h-24`} />
               ))}
             </div>
-            <Skeleton className="h-64 animate-fade-in-up stagger-5" />
+            <Skeleton className="h-64" />
           </div>
         </div>
       </div>
@@ -40,12 +40,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   if (!user) return null;
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex h-screen overflow-hidden bg-background">
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
         <Topbar />
-        <main className="flex-1 overflow-y-auto">
-          <div className="container max-w-6xl mx-auto px-4 py-6 animate-fade-in">
+        <main className="flex-1 overflow-y-auto dashboard-bg">
+          <div className="container max-w-6xl mx-auto px-4 md:px-6 py-6 animate-fade-in">
             {children}
           </div>
         </main>

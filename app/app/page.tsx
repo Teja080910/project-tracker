@@ -12,6 +12,9 @@ import {
   ArrowRight,
   Activity,
   TrendingUp,
+  Plus,
+  Clock,
+  Users,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -43,7 +46,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
 
   const fetchDashboard = useCallback(async () => {
-    if (!user) return;
+    if (!user || !profile) return;
 
     const [projectsRes, activeProjectsRes, myProjectsRes] = await Promise.all([
       supabase.from('projects').select('id', { count: 'exact', head: true }),
@@ -139,57 +142,71 @@ export default function DashboardPage() {
   }
 
   const statCards = [
-    { label: 'Total Projects', value: stats?.totalProjects ?? 0, icon: FolderKanban, gradient: 'from-blue-500 to-blue-600', iconBg: 'bg-blue-500/10 text-blue-500' },
-    { label: 'Active Projects', value: stats?.activeProjects ?? 0, icon: TrendingUp, gradient: 'from-green-500 to-green-600', iconBg: 'bg-green-500/10 text-green-500' },
-    { label: 'My Tasks', value: stats?.myTasks ?? 0, icon: ListTodo, gradient: 'from-amber-500 to-amber-600', iconBg: 'bg-amber-500/10 text-amber-500' },
-    { label: 'Open Tasks', value: stats?.openTasks ?? 0, icon: Circle, gradient: 'from-gray-500 to-gray-600', iconBg: 'bg-gray-500/10 text-gray-500' },
-    { label: 'In Progress', value: stats?.inProgressTasks ?? 0, icon: CircleDot, gradient: 'from-blue-500 to-indigo-600', iconBg: 'bg-blue-500/10 text-blue-500' },
-    { label: 'Completed', value: stats?.completedTasks ?? 0, icon: CheckCircle2, gradient: 'from-green-500 to-emerald-600', iconBg: 'bg-green-500/10 text-green-500' },
-    { label: 'Cancelled', value: stats?.cancelledTasks ?? 0, icon: CircleSlash, gradient: 'from-red-500 to-rose-600', iconBg: 'bg-red-500/10 text-red-500' },
+    { label: 'Total Projects', value: stats?.totalProjects ?? 0, icon: FolderKanban, gradient: 'from-blue-500/20 to-blue-600/10', iconBg: 'bg-blue-500/10 text-blue-500', ring: 'ring-blue-500/20' },
+    { label: 'Active Projects', value: stats?.activeProjects ?? 0, icon: TrendingUp, gradient: 'from-green-500/20 to-green-600/10', iconBg: 'bg-green-500/10 text-green-500', ring: 'ring-green-500/20' },
+    { label: 'My Tasks', value: stats?.myTasks ?? 0, icon: ListTodo, gradient: 'from-amber-500/20 to-amber-600/10', iconBg: 'bg-amber-500/10 text-amber-500', ring: 'ring-amber-500/20' },
+    { label: 'Open', value: stats?.openTasks ?? 0, icon: Circle, gradient: 'from-gray-500/20 to-gray-600/10', iconBg: 'bg-gray-500/10 text-gray-500', ring: 'ring-gray-500/20' },
+    { label: 'In Progress', value: stats?.inProgressTasks ?? 0, icon: CircleDot, gradient: 'from-blue-500/20 to-indigo-600/10', iconBg: 'bg-blue-500/10 text-blue-500', ring: 'ring-blue-500/20' },
+    { label: 'Completed', value: stats?.completedTasks ?? 0, icon: CheckCircle2, gradient: 'from-green-500/20 to-emerald-600/10', iconBg: 'bg-green-500/10 text-green-500', ring: 'ring-green-500/20' },
+    { label: 'Cancelled', value: stats?.cancelledTasks ?? 0, icon: CircleSlash, gradient: 'from-red-500/20 to-rose-600/10', iconBg: 'bg-red-500/10 text-red-500', ring: 'ring-red-500/20' },
   ];
 
   return (
     <div className="space-y-6">
-      <div className="animate-fade-in-up">
-        <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Welcome back, {profile?.full_name?.split(' ')[0] ?? profile?.email}
-        </p>
+      {/* Header */}
+      <div className="flex items-center justify-between animate-fade-in-up">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Welcome back, <span className="font-medium text-foreground">{profile?.full_name?.split(' ')[0] ?? profile?.email}</span>
+          </p>
+        </div>
+        <Button asChild className="h-9 gap-2 shadow-glow">
+          <Link href="/app/tasks/new">
+            <Plus className="h-4 w-4" />
+            New Task
+          </Link>
+        </Button>
       </div>
 
+      {/* Stat Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
         {statCards.map((card, i) => {
           const Icon = card.icon;
           return (
             <Card
               key={card.label}
-              className={`card-hover animate-fade-in-up stagger-${Math.min(i + 1, 7)} relative overflow-hidden group`}
+              className={`card-hover animate-fade-in-up stagger-${Math.min(i + 1, 7)} relative overflow-hidden group border-border/60`}
             >
-              <div className={`absolute inset-0 bg-gradient-to-br ${card.gradient} opacity-0 group-hover:opacity-[0.03] transition-opacity duration-300`} />
+              <div className={`absolute inset-0 bg-gradient-to-br ${card.gradient} opacity-0 group-hover:opacity-100 transition-opacity duration-500`} />
               <CardHeader className="flex flex-row items-center justify-between pb-2 pt-4 px-4 space-y-0">
-                <CardTitle className="text-xs font-medium text-muted-foreground">{card.label}</CardTitle>
-                <div className={`flex h-7 w-7 items-center justify-center rounded-lg ${card.iconBg} transition-transform duration-200 group-hover:scale-110`}>
+                <CardTitle className="text-xs font-medium text-muted-foreground group-hover:text-foreground/80 transition-colors">{card.label}</CardTitle>
+                <div className={`flex h-7 w-7 items-center justify-center rounded-lg ${card.iconBg} transition-all duration-200 group-hover:scale-110 group-hover:shadow-glow`}>
                   <Icon className="h-3.5 w-3.5" />
                 </div>
               </CardHeader>
               <CardContent className="px-4 pb-4">
-                <div className="text-2xl font-bold tabular-nums">{card.value}</div>
+                <div className="text-2xl font-bold tabular-nums tracking-tight">{card.value}</div>
               </CardContent>
             </Card>
           );
         })}
       </div>
 
-      <div className="grid md:grid-cols-2 gap-6">
+      {/* Task Lists */}
+      <div className="grid md:grid-cols-2 gap-5">
         {/* My assigned tasks */}
-        <Card className="animate-fade-in-up stagger-5">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-base">My Assigned Tasks</CardTitle>
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              <Activity className="h-3.5 w-3.5" />
-            </div>
+        <Card className="animate-fade-in-up stagger-5 border-border/60">
+          <CardHeader className="flex flex-row items-center justify-between pb-3">
+            <CardTitle className="text-base font-semibold flex items-center gap-2">
+              <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/10 text-primary">
+                <Activity className="h-3.5 w-3.5" />
+              </div>
+              My Assigned Tasks
+            </CardTitle>
+            <span className="text-xs text-muted-foreground tabular-nums">{myAssignedTasks.length} tasks</span>
           </CardHeader>
-          <CardContent className="space-y-1">
+          <CardContent className="space-y-0.5">
             {myAssignedTasks.length === 0 ? (
               <EmptyState
                 icon={CheckCircle2}
@@ -201,11 +218,11 @@ export default function DashboardPage() {
                 <Link
                   key={task.id}
                   href={`/app/tasks/${task.id}`}
-                  className="flex items-center gap-3 px-2 py-2 rounded-md hover:bg-secondary/50 transition-all duration-200 group row-hover"
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-accent/50 transition-all duration-200 group row-hover"
                 >
                   <TypeBadge type={task.type} />
-                  <span className="text-xs text-muted-foreground">#{task.number}</span>
-                  <span className="text-sm flex-1 truncate">{task.title}</span>
+                  <span className="text-xs text-muted-foreground font-mono">#{task.number}</span>
+                  <span className="text-sm flex-1 truncate font-medium">{task.title}</span>
                   <StatusBadge status={task.status} />
                   <ArrowRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-all duration-200 group-hover:translate-x-0.5" />
                 </Link>
@@ -215,14 +232,17 @@ export default function DashboardPage() {
         </Card>
 
         {/* Recently updated tasks */}
-        <Card className="animate-fade-in-up stagger-6">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-base">Recently Updated</CardTitle>
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              <Activity className="h-3.5 w-3.5" />
-            </div>
+        <Card className="animate-fade-in-up stagger-6 border-border/60">
+          <CardHeader className="flex flex-row items-center justify-between pb-3">
+            <CardTitle className="text-base font-semibold flex items-center gap-2">
+              <div className="flex h-6 w-6 items-center justify-center rounded-md bg-amber-500/10 text-amber-500">
+                <Clock className="h-3.5 w-3.5" />
+              </div>
+              Recently Updated
+            </CardTitle>
+            <span className="text-xs text-muted-foreground tabular-nums">{recentTasks.length} tasks</span>
           </CardHeader>
-          <CardContent className="space-y-1">
+          <CardContent className="space-y-0.5">
             {recentTasks.length === 0 ? (
               <EmptyState
                 icon={Activity}
@@ -234,12 +254,12 @@ export default function DashboardPage() {
                 <Link
                   key={task.id}
                   href={`/app/tasks/${task.id}`}
-                  className="flex items-center gap-3 px-2 py-2 rounded-md hover:bg-secondary/50 transition-all duration-200 group row-hover"
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-accent/50 transition-all duration-200 group row-hover"
                 >
                   <TypeBadge type={task.type} />
-                  <span className="text-xs text-muted-foreground">#{task.number}</span>
-                  <span className="text-sm flex-1 truncate">{task.title}</span>
-                  <span className="text-xs text-muted-foreground">{formatRelativeTime(task.updated_at)}</span>
+                  <span className="text-xs text-muted-foreground font-mono">#{task.number}</span>
+                  <span className="text-sm flex-1 truncate font-medium">{task.title}</span>
+                  <span className="text-xs text-muted-foreground/60">{formatRelativeTime(task.updated_at)}</span>
                   <ArrowRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 group-hover:opacity-100 transition-all duration-200 group-hover:translate-x-0.5" />
                 </Link>
               ))
@@ -248,12 +268,20 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* Recent projects */}
-      <Card className="animate-fade-in-up stagger-7">
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="text-base">Recent Projects</CardTitle>
-          <Button variant="ghost" size="sm" asChild>
-            <Link href="/app/projects">View all</Link>
+      {/* Recent Projects */}
+      <Card className="animate-fade-in-up stagger-7 border-border/60">
+        <CardHeader className="flex flex-row items-center justify-between pb-3">
+          <CardTitle className="text-base font-semibold flex items-center gap-2">
+            <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/10 text-primary">
+              <FolderKanban className="h-3.5 w-3.5" />
+            </div>
+            Recent Projects
+          </CardTitle>
+          <Button variant="ghost" size="sm" asChild className="h-8 gap-1">
+            <Link href="/app/projects">
+              View all
+              <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
           </Button>
         </CardHeader>
         <CardContent>
@@ -274,18 +302,26 @@ export default function DashboardPage() {
                 <Link
                   key={project.id}
                   href={`/app/projects/${project.id}`}
-                  className="block p-4 rounded-lg border border-border hover:border-foreground/20 transition-all duration-200 group card-hover bg-card"
+                  className="block p-4 rounded-xl border border-border/60 hover:border-primary/20 transition-all duration-200 group card-hover bg-card/50"
                 >
-                  <div className="flex items-center gap-2 mb-2">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary transition-transform duration-200 group-hover:scale-110">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary transition-all duration-200 group-hover:scale-110 group-hover:shadow-glow">
                       <FolderKanban className="h-4 w-4" />
                     </div>
-                    <span className="font-medium text-sm group-hover:text-foreground">{project.name}</span>
+                    <div className="min-w-0">
+                      <span className="font-semibold text-sm group-hover:text-foreground block truncate">{project.name}</span>
+                      {project.client_name && (
+                        <span className="text-[10px] text-muted-foreground">{project.client_name}</span>
+                      )}
+                    </div>
                   </div>
                   {project.description && (
-                    <p className="text-xs text-muted-foreground line-clamp-2">{project.description}</p>
+                    <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">{project.description}</p>
                   )}
-                  <p className="text-xs text-muted-foreground mt-2">{formatRelativeTime(project.created_at)}</p>
+                  <div className="flex items-center gap-2 mt-3 text-[10px] text-muted-foreground/60">
+                    <Clock className="h-3 w-3" />
+                    {formatRelativeTime(project.created_at)}
+                  </div>
                 </Link>
               ))}
             </div>

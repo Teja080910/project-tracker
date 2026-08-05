@@ -44,7 +44,7 @@ export default function NewTaskPage() {
   const [members, setMembers] = useState<Profile[]>([]);
 
   const fetchProjects = useCallback(async () => {
-    if (!user) return;
+    if (!user || !profile) return;
     if (profile?.role === 'super_admin') {
       const { data } = await supabase.from('projects').select('*').order('name');
       setProjects((data as Project[]) ?? []);

@@ -18,7 +18,7 @@ export function StatusBadge({ status, className }: { status: string; className?:
   return (
     <Badge
       variant="outline"
-      className={cn('gap-1.5 font-medium transition-colors duration-200', colorClasses[meta.color], className)}
+      className={cn('gap-1.5 font-medium transition-all duration-200', colorClasses[meta.color], className)}
     >
       <Icon className="h-3 w-3" />
       {meta.label}
@@ -31,9 +31,9 @@ export function PriorityBadge({ priority, className }: { priority: string; class
   return (
     <Badge
       variant="outline"
-      className={cn('gap-1.5 font-medium transition-colors duration-200', colorClasses[meta.color], className)}
+      className={cn('gap-1.5 font-medium transition-all duration-200', colorClasses[meta.color], className)}
     >
-      <span className={cn('h-2 w-2 rounded-full transition-transform duration-200', {
+      <span className={cn('h-2 w-2 rounded-full', {
         'bg-gray-400': meta.color === 'gray',
         'bg-blue-500': meta.color === 'blue',
         'bg-amber-500': meta.color === 'amber',
@@ -50,7 +50,7 @@ export function TypeBadge({ type, className }: { type: string; className?: strin
   return (
     <Badge
       variant="outline"
-      className={cn('gap-1.5 font-medium transition-colors duration-200', colorClasses[meta.color], className)}
+      className={cn('gap-1.5 font-medium transition-all duration-200', colorClasses[meta.color], className)}
     >
       <Icon className="h-3 w-3" />
       {meta.label}
