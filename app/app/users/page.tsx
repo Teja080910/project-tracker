@@ -61,7 +61,7 @@ export default function UsersPage() {
     return (
       <div className="text-center py-12">
         <Shield className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
-        <p className="text-sm text-muted-foreground">You don't have permission to manage users.</p>
+        <p className="text-sm text-muted-foreground">You don&apos;t have permission to manage users.</p>
         <Button variant="outline" className="mt-4" asChild>
           <Link href="/app">Back to Dashboard</Link>
         </Button>
@@ -80,8 +80,8 @@ export default function UsersPage() {
     if (error) {
       toast.error(error.message);
     } else {
+      await fetchUsers();
       toast.success('Role updated');
-      fetchUsers();
     }
   };
 
@@ -90,8 +90,8 @@ export default function UsersPage() {
     if (error) {
       toast.error(error.message);
     } else {
+      await fetchUsers();
       toast.success(disabled ? 'User enabled' : 'User disabled');
-      fetchUsers();
     }
   };
 

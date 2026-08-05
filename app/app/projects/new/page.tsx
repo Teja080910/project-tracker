@@ -32,7 +32,7 @@ export default function NewProjectPage() {
   if (profile?.role !== 'super_admin') {
     return (
       <div className="text-center py-12">
-        <p className="text-sm text-muted-foreground">You don't have permission to create projects.</p>
+        <p className="text-sm text-muted-foreground">You don&apos;t have permission to create projects.</p>
         <Button variant="outline" className="mt-4" asChild>
           <Link href="/app/projects">Back to Projects</Link>
         </Button>
@@ -58,20 +58,30 @@ export default function NewProjectPage() {
     if (error) {
       toast.error(error.message);
       setLoading(false);
-    } else {
-      await supabase.from('project_members').insert({
+      return;
+    }
+
+    try {
+      const { error: memberErr } = await supabase.from('project_members').insert({
         project_id: data.id,
         user_id: user.id,
         role: 'project_admin',
       });
-      await supabase.from('activity_logs').insert({
+      if (memberErr) throw memberErr;
+
+      const { error: logErr } = await supabase.from('activity_logs').insert({
         project_id: data.id,
         user_id: user.id,
         action: 'created project',
         entity_type: 'project',
         entity_id: data.id,
       });
+      if (logErr) throw logErr;
+
       toast.success('Project created');
+      router.push(`/app/projects/${data.id}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Project created but setup failed');
       router.push(`/app/projects/${data.id}`);
     }
   };

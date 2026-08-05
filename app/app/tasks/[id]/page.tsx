@@ -172,16 +172,17 @@ export default function TaskDetailPage() {
 
       if (dbError) throw dbError;
 
-      await supabase.from('activity_logs').insert({
+      const { error: logErr } = await supabase.from('activity_logs').insert({
         project_id: task.project_id,
         task_id: taskId,
         user_id: user.id,
         action: 'uploaded screenshot',
         entity_type: 'task_image',
       });
+      if (logErr) throw logErr;
 
+      await fetchTask();
       toast.success('Image uploaded');
-      fetchTask();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Upload failed');
     } finally {
@@ -209,10 +210,12 @@ export default function TaskDetailPage() {
   };
 
   const deleteImage = async (image: TaskImage) => {
-    await supabase.storage.from('task-screenshots').remove([image.storage_path]);
-    await supabase.from('task_images').delete().eq('id', image.id);
+    const { error: storageErr } = await supabase.storage.from('task-screenshots').remove([image.storage_path]);
+    if (storageErr) { toast.error(storageErr.message); return; }
+    const { error: dbErr } = await supabase.from('task_images').delete().eq('id', image.id);
+    if (dbErr) { toast.error(dbErr.message); return; }
+    await fetchTask();
     toast.success('Image deleted');
-    fetchTask();
   };
 
   const getImageUrl = (path: string) => {
@@ -231,28 +234,35 @@ export default function TaskDetailPage() {
 
     if (error) {
       toast.error(error.message);
-    } else {
-      await supabase.from('activity_logs').insert({
+      setCommentLoading(false);
+      return;
+    }
+
+    try {
+      const { error: logErr } = await supabase.from('activity_logs').insert({
         project_id: task.project_id,
         task_id: taskId,
         user_id: user.id,
         action: 'added comment',
         entity_type: 'comment',
       });
+      if (logErr) throw logErr;
 
-      // Notify assignee if someone else commented
       if (task.assignee_id && task.assignee_id !== user.id) {
-        await supabase.from('notifications').insert({
+        const { error: notifErr } = await supabase.from('notifications').insert({
           user_id: task.assignee_id,
           type: 'comment_added',
           title: `New comment on #${task.number}`,
           body: newComment.trim().slice(0, 100),
           link: `/app/tasks/${taskId}`,
         });
+        if (notifErr) throw notifErr;
       }
 
       setNewComment('');
-      fetchTask();
+      await fetchTask();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to save comment');
     }
     setCommentLoading(false);
   };
@@ -262,10 +272,11 @@ export default function TaskDetailPage() {
     const { error } = await supabase.from('tasks').update(updates).eq('id', taskId);
     if (error) {
       toast.error(error.message);
-    } else {
-      // Log status changes
+      return;
+    }
+    try {
       if (updates.status && updates.status !== task.status) {
-        await supabase.from('activity_logs').insert({
+        const { error: logErr } = await supabase.from('activity_logs').insert({
           project_id: task.project_id,
           task_id: taskId,
           user_id: user.id,
@@ -274,30 +285,32 @@ export default function TaskDetailPage() {
           entity_id: taskId,
           metadata: { from: task.status, to: updates.status },
         });
+        if (logErr) throw logErr;
 
-        // Notify assignee
         if (task.assignee_id && task.assignee_id !== user.id) {
-          await supabase.from('notifications').insert({
+          const { error: notifErr } = await supabase.from('notifications').insert({
             user_id: task.assignee_id,
             type: 'status_changed',
             title: `Status changed on #${task.number}`,
             body: `${task.status.replace('_', ' ')} → ${updates.status.replace('_', ' ')}`,
             link: `/app/tasks/${taskId}`,
           });
+          if (notifErr) throw notifErr;
         }
       }
       if (updates.assignee_id !== undefined && updates.assignee_id !== task.assignee_id) {
         const newAssigneeId = updates.assignee_id;
         if (newAssigneeId && newAssigneeId !== user.id) {
-          await supabase.from('notifications').insert({
+          const { error: notifErr } = await supabase.from('notifications').insert({
             user_id: newAssigneeId,
             type: 'task_assigned',
             title: `Task assigned: #${task.number}`,
             body: task.title,
             link: `/app/tasks/${taskId}`,
           });
+          if (notifErr) throw notifErr;
         }
-        await supabase.from('activity_logs').insert({
+        const { error: logErr } = await supabase.from('activity_logs').insert({
           project_id: task.project_id,
           task_id: taskId,
           user_id: user.id,
@@ -305,8 +318,11 @@ export default function TaskDetailPage() {
           entity_type: 'task',
           entity_id: taskId,
         });
+        if (logErr) throw logErr;
       }
-      fetchTask();
+      await fetchTask();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Operation failed');
     }
   };
 
@@ -345,7 +361,7 @@ export default function TaskDetailPage() {
   if (!task) {
     return (
       <div className="text-center py-12">
-        <p className="text-sm text-muted-foreground">Task not found or you don't have access.</p>
+        <p className="text-sm text-muted-foreground">Task not found or you don&apos;t have access.</p>
         <Button variant="outline" className="mt-4" asChild>
           <Link href="/app/tasks">Back to Tasks</Link>
         </Button>

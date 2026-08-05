@@ -119,9 +119,11 @@ export default function NewTaskPage() {
     if (error) {
       toast.error(error.message);
       setLoading(false);
-    } else {
-      // Log activity
-      await supabase.from('activity_logs').insert({
+      return;
+    }
+
+    try {
+      const { error: logErr } = await supabase.from('activity_logs').insert({
         project_id: projectId,
         task_id: data.id,
         user_id: user.id,
@@ -129,19 +131,23 @@ export default function NewTaskPage() {
         entity_type: 'task',
         entity_id: data.id,
       });
+      if (logErr) throw logErr;
 
-      // Notify assignee if assigned
       if (assigneeId !== 'none' && assigneeId !== user.id) {
-        await supabase.from('notifications').insert({
+        const { error: notifErr } = await supabase.from('notifications').insert({
           user_id: assigneeId,
           type: 'task_assigned',
           title: `New ${type} assigned: #${data.number}`,
           body: title,
           link: `/app/tasks/${data.id}`,
         });
+        if (notifErr) throw notifErr;
       }
 
       toast.success('Task created');
+      router.push(`/app/tasks/${data.id}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Task created but notification failed');
       router.push(`/app/tasks/${data.id}`);
     }
   };

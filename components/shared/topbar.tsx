@@ -44,16 +44,18 @@ export function Topbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const fetchNotifications = useCallback(async () => {
+    if (!profile) return;
     const { data } = await supabase
       .from('notifications')
       .select('*')
+      .eq('user_id', profile.id)
       .order('created_at', { ascending: false })
       .limit(10);
     if (data) {
       setNotifications(data as Notification[]);
       setUnreadCount(data.filter((n) => !n.read).length);
     }
-  }, []);
+  }, [profile]);
 
   useEffect(() => {
     fetchNotifications();
@@ -92,7 +94,8 @@ export function Topbar() {
   }, [searchQuery]);
 
   const markAllRead = async () => {
-    await supabase.from('notifications').update({ read: true }).eq('read', false);
+    if (!profile) return;
+    await supabase.from('notifications').update({ read: true }).eq('user_id', profile.id).eq('read', false);
     fetchNotifications();
   };
 

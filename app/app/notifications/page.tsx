@@ -8,40 +8,47 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/shared/empty-state';
 import { supabase } from '@/lib/supabase/client';
+import { useAuth } from '@/lib/auth-context';
 import { formatRelativeTime } from '@/lib/utils';
 import { toast } from 'sonner';
 import type { Notification } from '@/lib/types';
 
 export default function NotificationsPage() {
+  const { user } = useAuth();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchNotifications = useCallback(async () => {
+    if (!user) return;
     const { data } = await supabase
       .from('notifications')
       .select('*')
+      .eq('user_id', user.id)
       .order('created_at', { ascending: false });
     setNotifications((data as Notification[]) ?? []);
     setLoading(false);
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     fetchNotifications();
   }, [fetchNotifications]);
 
   const markAllRead = async () => {
-    await supabase.from('notifications').update({ read: true }).eq('read', false);
+    if (!user) return;
+    await supabase.from('notifications').update({ read: true }).eq('user_id', user.id).eq('read', false);
+    await fetchNotifications();
     toast.success('All marked as read');
-    fetchNotifications();
   };
 
   const markRead = async (id: string) => {
-    await supabase.from('notifications').update({ read: true }).eq('id', id);
+    if (!user) return;
+    await supabase.from('notifications').update({ read: true }).eq('id', id).eq('user_id', user.id);
     fetchNotifications();
   };
 
   const deleteNotification = async (id: string) => {
-    await supabase.from('notifications').delete().eq('id', id);
+    if (!user) return;
+    await supabase.from('notifications').delete().eq('id', id).eq('user_id', user.id);
     fetchNotifications();
   };
 

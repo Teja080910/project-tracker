@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase/client';
+import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -17,17 +18,39 @@ import {
 } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
-import { Loader2, ArrowLeft } from 'lucide-react';
+import { Loader2, ArrowLeft, Shield } from 'lucide-react';
 
 export default function NewVersionPage() {
   const params = useParams();
   const router = useRouter();
+  const { user, profile } = useAuth();
   const projectId = params.id as string;
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [releaseDate, setReleaseDate] = useState('');
   const [status, setStatus] = useState('active');
   const [loading, setLoading] = useState(false);
+  const [checking, setChecking] = useState(true);
+  const [canManage, setCanManage] = useState(false);
+
+  useEffect(() => {
+    if (!user || !profile) return;
+    (async () => {
+      if (profile.role === 'super_admin') {
+        setCanManage(true);
+        setChecking(false);
+        return;
+      }
+      const { data: membership } = await supabase
+        .from('project_members')
+        .select('role')
+        .eq('project_id', projectId)
+        .eq('user_id', user.id)
+        .maybeSingle();
+      setCanManage(membership?.role === 'project_admin' || membership?.role === 'super_admin');
+      setChecking(false);
+    })();
+  }, [user, profile, projectId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,6 +74,48 @@ export default function NewVersionPage() {
       router.push(`/app/projects/${projectId}/versions/${data.id}`);
     }
   };
+
+  if (checking) {
+    return (
+      <div className="max-w-2xl space-y-6">
+        <div className="flex items-center gap-3 animate-fade-in-up">
+          <Button variant="ghost" size="icon" asChild className="hover:scale-105 transition-transform duration-200">
+            <Link href={`/app/projects/${projectId}`}>
+              <ArrowLeft className="h-4 w-4" />
+            </Link>
+          </Button>
+          <h1 className="text-2xl font-semibold tracking-tight">New Version</h1>
+        </div>
+        <Card>
+          <CardContent className="py-6 text-center text-sm text-muted-foreground">Checking permissions...</CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (!canManage) {
+    return (
+      <div className="max-w-2xl space-y-6">
+        <div className="flex items-center gap-3 animate-fade-in-up">
+          <Button variant="ghost" size="icon" asChild className="hover:scale-105 transition-transform duration-200">
+            <Link href={`/app/projects/${projectId}`}>
+              <ArrowLeft className="h-4 w-4" />
+            </Link>
+          </Button>
+          <h1 className="text-2xl font-semibold tracking-tight">New Version</h1>
+        </div>
+        <Card>
+          <CardContent className="py-6 text-center">
+            <Shield className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
+            <p className="text-sm text-muted-foreground">You don&apos;t have permission to create versions.</p>
+            <Button variant="outline" className="mt-4" asChild>
+              <Link href={`/app/projects/${projectId}`}>Back to Project</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-2xl space-y-6">

@@ -59,9 +59,9 @@ export default function DashboardPage() {
     ]);
 
     const recentProjectsData =
-      profile?.role === 'super_admin'
+      (profile?.role === 'super_admin'
         ? (myProjectsRes.data as unknown as Project[])
-        : (myProjectsRes.data?.map((m) => m.project) as unknown as Project[]) ?? [];
+        : (myProjectsRes.data?.map((m) => m.project) as unknown as Project[])) ?? [];
     setRecentProjects(recentProjectsData);
 
     const projectIds = recentProjectsData.map((p) => p.id);

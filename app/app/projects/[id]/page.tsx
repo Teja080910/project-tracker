@@ -121,10 +121,10 @@ export default function ProjectDetailPage() {
     if (error) {
       toast.error(error.message);
     } else {
-      toast.success('Member added');
       setNewMemberId('');
       setAddMemberOpen(false);
-      fetchProject();
+      await fetchProject();
+      toast.success('Member added');
     }
   };
 
@@ -133,8 +133,8 @@ export default function ProjectDetailPage() {
     if (error) {
       toast.error(error.message);
     } else {
+      await fetchProject();
       toast.success('Member removed');
-      fetchProject();
     }
   };
 
@@ -143,8 +143,8 @@ export default function ProjectDetailPage() {
     if (error) {
       toast.error(error.message);
     } else {
+      await fetchProject();
       toast.success('Role updated');
-      fetchProject();
     }
   };
 
@@ -174,7 +174,7 @@ export default function ProjectDetailPage() {
   if (!project) {
     return (
       <div className="text-center py-12">
-        <p className="text-sm text-muted-foreground">Project not found or you don't have access.</p>
+        <p className="text-sm text-muted-foreground">Project not found or you don&apos;t have access.</p>
         <Button variant="outline" className="mt-4" asChild>
           <Link href="/app/projects">Back to Projects</Link>
         </Button>
@@ -228,7 +228,7 @@ export default function ProjectDetailPage() {
                     value={project.status}
                     onValueChange={async (v) => {
                       await supabase.from('projects').update({ status: v }).eq('id', projectId);
-                      fetchProject();
+                      await fetchProject();
                       toast.success('Project updated');
                     }}
                   >
