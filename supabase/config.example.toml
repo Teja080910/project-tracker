@@ -1,0 +1,20 @@
+[db]
+port = 54325
+
+[studio]
+port = 54323
+
+[inbucket]
+port = 54328
+smtp_port = 54329
+pop3_port = 54330
+
+[auth]
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://localhost:3000/**"]
+
+[auth.external.google]
+enabled = true
+client_id = ""
+secret = ""
+redirect_uri = "http://localhost:54321/auth/v1/callback"
