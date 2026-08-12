@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
+import { APP_NAME, APP_LOGO_URL, APP_INITIAL } from '@/lib/app-config';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -82,13 +83,17 @@ export default function SignupPage() {
       <div className="w-full max-w-sm space-y-6 relative">
         {/* Logo & Header */}
         <div className="flex flex-col items-center gap-4">
-          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-blue text-primary-foreground text-2xl font-bold shadow-glow-lg animate-fade-in-scale relative overflow-hidden">
-            <div className="absolute inset-0 bg-white/20 rounded-2xl animate-breathe" />
-            <span className="relative">T</span>
-          </div>
+          {APP_LOGO_URL ? (
+            <img src={APP_LOGO_URL} alt={APP_NAME} className="h-16 w-16 rounded-2xl object-contain shadow-glow-lg" />
+          ) : (
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-blue text-primary-foreground text-2xl font-bold shadow-glow-lg animate-fade-in-scale relative overflow-hidden">
+              <div className="absolute inset-0 bg-white/20 rounded-2xl animate-breathe" />
+              <span className="relative">{APP_INITIAL}</span>
+            </div>
+          )}
           <div className="text-center animate-fade-in-up">
             <h1 className="text-2xl font-bold tracking-tight">Create account</h1>
-            <p className="text-sm text-muted-foreground mt-1.5">Get started with Trackflow</p>
+            <p className="text-sm text-muted-foreground mt-1.5">Get started with {APP_NAME}</p>
           </div>
         </div>
 

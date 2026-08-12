@@ -16,6 +16,7 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/auth-context';
 import { UserAvatar } from '@/components/shared/user-avatar';
 import { getRoleLabel } from '@/lib/constants';
+import { APP_NAME, APP_LOGO_URL, APP_INITIAL } from '@/lib/app-config';
 
 const navItems = [
   { href: '/app', label: 'Dashboard', icon: LayoutDashboard },
@@ -32,12 +33,16 @@ export function Sidebar() {
   return (
     <aside className="hidden md:flex flex-col w-60 sidebar-bg shrink-0">
       <div className="flex items-center gap-2.5 px-4 h-14 border-b border-sidebar-border">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-blue text-primary-foreground text-sm font-bold shadow-soft relative overflow-hidden">
-          <div className="absolute inset-0 bg-white/20 rounded-lg animate-breathe" />
-          <span className="relative">T</span>
-        </div>
+        {APP_LOGO_URL ? (
+          <img src={APP_LOGO_URL} alt={APP_NAME} className="h-8 w-8 rounded-lg object-contain" />
+        ) : (
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-blue text-primary-foreground text-sm font-bold shadow-soft relative overflow-hidden">
+            <div className="absolute inset-0 bg-white/20 rounded-lg animate-breathe" />
+            <span className="relative">{APP_INITIAL}</span>
+          </div>
+        )}
         <div className="flex flex-col">
-          <span className="font-semibold text-sm tracking-tight">Trackflow</span>
+          <span className="font-semibold text-sm tracking-tight">{APP_NAME}</span>
           <span className="text-[10px] text-muted-foreground -mt-0.5">Project Management</span>
         </div>
       </div>

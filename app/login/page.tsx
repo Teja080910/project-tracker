@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase/client';
+import { APP_NAME, APP_LOGO_URL, APP_INITIAL } from '@/lib/app-config';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -22,6 +23,8 @@ function GoogleIcon() {
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectTo = searchParams.get('redirect');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -32,7 +35,9 @@ export default function LoginPage() {
     setGoogleLoading(true);
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback${redirectTo ? `?redirect=${encodeURIComponent(redirectTo)}` : ''}`,
+      },
     });
     if (error) {
       toast.error(error.message);
@@ -42,9 +47,9 @@ export default function LoginPage() {
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) router.replace('/app');
+      if (session) router.replace(redirectTo || '/app');
     });
-  }, [router]);
+  }, [router, redirectTo]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -54,7 +59,7 @@ export default function LoginPage() {
       toast.error(error.message);
       setLoading(false);
     } else {
-      router.push('/app');
+      router.push(redirectTo || '/app');
     }
   };
 
@@ -70,13 +75,17 @@ export default function LoginPage() {
       <div className="w-full max-w-sm space-y-6 relative">
         {/* Logo & Header */}
         <div className="flex flex-col items-center gap-4">
-          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-blue text-primary-foreground text-2xl font-bold shadow-glow-lg animate-fade-in-scale relative overflow-hidden">
-            <div className="absolute inset-0 bg-white/20 rounded-2xl animate-breathe" />
-            <span className="relative">T</span>
-          </div>
+          {APP_LOGO_URL ? (
+            <img src={APP_LOGO_URL} alt={APP_NAME} className="h-16 w-16 rounded-2xl object-contain shadow-glow-lg" />
+          ) : (
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-blue text-primary-foreground text-2xl font-bold shadow-glow-lg animate-fade-in-scale relative overflow-hidden">
+              <div className="absolute inset-0 bg-white/20 rounded-2xl animate-breathe" />
+              <span className="relative">{APP_INITIAL}</span>
+            </div>
+          )}
           <div className="text-center animate-fade-in-up">
             <h1 className="text-2xl font-bold tracking-tight">Welcome back</h1>
-            <p className="text-sm text-muted-foreground mt-1.5">Sign in to your account to continue</p>
+            <p className="text-sm text-muted-foreground mt-1.5">Sign in to {APP_NAME} to continue</p>
           </div>
         </div>
 

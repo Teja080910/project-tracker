@@ -28,6 +28,7 @@ import { formatRelativeTime, cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import Link from 'next/link';
 import type { Notification } from '@/lib/types';
+import { APP_NAME, APP_LOGO_URL, APP_INITIAL } from '@/lib/app-config';
 
 export function Topbar() {
   const { profile, signOut } = useAuth();
@@ -116,10 +117,14 @@ export function Topbar() {
         <SheetContent side="left" className="w-64 p-0">
           <SheetHeader className="px-4 py-3 border-b border-border">
             <SheetTitle className="flex items-center gap-2">
-              <div className="flex h-7 w-7 items-center justify-center rounded-md bg-gradient-blue text-primary-foreground text-sm font-bold">
-                T
-              </div>
-              Trackflow
+              {APP_LOGO_URL ? (
+                <img src={APP_LOGO_URL} alt={APP_NAME} className="h-7 w-7 rounded-md object-contain" />
+              ) : (
+                <div className="flex h-7 w-7 items-center justify-center rounded-md bg-gradient-blue text-primary-foreground text-sm font-bold">
+                  {APP_INITIAL}
+                </div>
+              )}
+              {APP_NAME}
             </SheetTitle>
           </SheetHeader>
           <MobileNav onNavigate={() => setMobileOpen(false)} />

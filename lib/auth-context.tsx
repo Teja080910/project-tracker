@@ -37,20 +37,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let mounted = true;
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    const validateSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
       if (!mounted) return;
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchProfile(session.user.id).finally(() => mounted && setLoading(false));
-      } else {
+      if (!session) {
+        setSession(null);
+        setUser(null);
+        setProfile(null);
         setLoading(false);
+        return;
       }
-    });
+      const { data: { user }, error } = await supabase.auth.getUser();
+      if (!mounted) return;
+      if (error || !user) {
+        await supabase.auth.signOut();
+        setSession(null);
+        setUser(null);
+        setProfile(null);
+        setLoading(false);
+        return;
+      }
+      setSession(session);
+      setUser(user);
+      fetchProfile(user.id).finally(() => mounted && setLoading(false));
+    };
+
+    validateSession();
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED' && !session) {
+        setSession(null);
+        setUser(null);
+        setProfile(null);
+        setLoading(false);
+        return;
+      }
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {

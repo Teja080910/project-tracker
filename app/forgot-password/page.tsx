@@ -8,6 +8,7 @@ import { ArrowLeft, CheckCircle2, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { APP_NAME, APP_LOGO_URL, APP_INITIAL } from '@/lib/app-config';
 
 export default function ForgotPasswordPage() {
   const router = useRouter();
@@ -49,13 +50,17 @@ export default function ForgotPasswordPage() {
 
       <div className="w-full max-w-sm space-y-6 relative animate-fade-in-up">
         <div className="flex flex-col items-center gap-3">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-blue text-primary-foreground text-2xl font-bold shadow-card animate-fade-in-scale">
-            T
-          </div>
+          {APP_LOGO_URL ? (
+            <img src={APP_LOGO_URL} alt={APP_NAME} className="h-14 w-14 rounded-2xl object-contain shadow-card" />
+          ) : (
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-blue text-primary-foreground text-2xl font-bold shadow-card animate-fade-in-scale">
+              {APP_INITIAL}
+            </div>
+          )}
           <div className="text-center">
             <h1 className="text-2xl font-semibold tracking-tight">Reset password</h1>
             <p className="text-sm text-muted-foreground mt-1">
-              {sent ? 'Check your email for a reset link' : 'Enter your email to receive a reset link'}
+              {sent ? 'Check your email for a reset link' : `Enter your email to receive a reset link for ${APP_NAME}`}
             </p>
           </div>
         </div>

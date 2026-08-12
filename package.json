@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "make-admin": "npx tsx scripts/make-admin.ts"
+    "make-admin": "npx tsx scripts/make-admin.ts",
+    "test:apis": "sucrase-node scripts/test-apis.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
