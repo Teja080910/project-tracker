@@ -4,7 +4,7 @@ import { Inter } from 'next/font/google';
 import { ThemeProvider } from '@/lib/theme-provider';
 import { AuthProvider } from '@/lib/auth-context';
 import { Toaster } from '@/components/ui/sonner';
-import { APP_NAME, APP_URL } from '@/lib/app-config';
+import { APP_NAME, APP_URL, APP_LOGO_URL } from '@/lib/app-config';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-sans' });
 
@@ -12,6 +12,9 @@ export const metadata: Metadata = {
   title: `${APP_NAME} — Project & Issue Management`,
   description: 'A lightweight project management system for software teams.',
   metadataBase: APP_URL ? new URL(APP_URL) : undefined,
+  icons: {
+    icon: APP_LOGO_URL ? [{ url: APP_LOGO_URL }] : undefined,
+  },
 };
 
 export default function RootLayout({

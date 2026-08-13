@@ -34,6 +34,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
+import { Check, ChevronsUpDown } from 'lucide-react';
 import { UserAvatar } from '@/components/shared/user-avatar';
 import { StatusBadge, TypeBadge, PriorityBadge } from '@/components/shared/badges';
 import { EmptyState } from '@/components/shared/empty-state';
@@ -42,7 +56,7 @@ import { supabase } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth-context';
 import { sendNotificationEmail } from '@/lib/email-client';
 import { TASK_TYPES, TASK_STATUSES, TASK_PRIORITIES, getRoleLabel } from '@/lib/constants';
-import { formatDate, formatRelativeTime } from '@/lib/utils';
+import { formatDate, formatRelativeTime, cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import type { Task, Comment, ActivityLog, Profile, Version, Project } from '@/lib/types';
 
@@ -74,6 +88,7 @@ export default function TaskDetailPage() {
   const [myRole, setMyRole] = useState<string | null>(null);
   const [activityPage, setActivityPage] = useState(1);
   const [showAllActivity, setShowAllActivity] = useState(false);
+  const [assigneeOpen, setAssigneeOpen] = useState(false);
   const ACTIVITY_PAGE_SIZE = 10;
   const ACTIVITY_PREVIEW_COUNT = 5;
 
@@ -858,21 +873,71 @@ export default function TaskDetailPage() {
               {/* Assignee */}
               <div className="space-y-1.5">
                 <label className="text-xs text-muted-foreground">Assignee</label>
-                <Select
-                  value={task.assignee_id ?? 'none'}
-                  onValueChange={(v) => updateTask({ assignee_id: v === 'none' ? null : v })}
-                  disabled={!canEdit}
-                >
-                  <SelectTrigger className="h-9">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Unassigned</SelectItem>
-                    {members.map((m) => (
-                      <SelectItem key={m.id} value={m.id}>{m.full_name ?? m.email}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Popover open={assigneeOpen} onOpenChange={setAssigneeOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={assigneeOpen}
+                      disabled={!canEdit}
+                      className="w-full justify-between font-normal h-9"
+                    >
+                      {task.assignee
+                        ? task.assignee.full_name ?? task.assignee.email
+                        : 'Unassigned'}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Search members..." />
+                      <CommandList className="max-h-56 overflow-y-auto">
+                        <CommandEmpty>No member found.</CommandEmpty>
+                        <CommandGroup>
+                          <CommandItem
+                            value="unassigned"
+                            onSelect={() => {
+                              updateTask({ assignee_id: null });
+                              setAssigneeOpen(false);
+                            }}
+                          >
+                            <Check
+                              className={cn(
+                                'mr-2 h-4 w-4',
+                                !task.assignee_id ? 'opacity-100' : 'opacity-0'
+                              )}
+                            />
+                            Unassigned
+                          </CommandItem>
+                          {members.map((m) => (
+                            <CommandItem
+                              key={m.id}
+                              value={`${m.full_name ?? ''} ${m.email}`}
+                              onSelect={() => {
+                                updateTask({ assignee_id: m.id });
+                                setAssigneeOpen(false);
+                              }}
+                            >
+                              <Check
+                                className={cn(
+                                  'mr-2 h-4 w-4',
+                                  task.assignee_id === m.id ? 'opacity-100' : 'opacity-0'
+                                )}
+                              />
+                              <UserAvatar profile={m} className="h-6 w-6 mr-2" />
+                              <span className="flex flex-col min-w-0">
+                                <span className="truncate text-sm">{m.full_name ?? m.email}</span>
+                                {m.full_name && (
+                                  <span className="text-[11px] text-muted-foreground truncate">{m.email}</span>
+                                )}
+                              </span>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
 
               {/* Version */}

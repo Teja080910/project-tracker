@@ -22,6 +22,21 @@ import { TASK_TYPES, TASK_PRIORITIES } from '@/lib/constants';
 import { StatusBadge, TypeBadge } from '@/components/shared/badges';
 import { UserAvatar } from '@/components/shared/user-avatar';
 import { EmptyState } from '@/components/shared/empty-state';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
+import { Check, ChevronsUpDown } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { Loader2, ArrowLeft, Plus, FolderKanban } from 'lucide-react';
 import type { Project, Version, Profile, Task } from '@/lib/types';
@@ -40,6 +55,7 @@ export default function NewTaskPage() {
   const [type, setType] = useState('task');
   const [priority, setPriority] = useState('medium');
   const [assigneeId, setAssigneeId] = useState('none');
+  const [assigneeOpen, setAssigneeOpen] = useState(false);
   const [dueDate, setDueDate] = useState('');
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -356,17 +372,71 @@ export default function NewTaskPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="assignee">Assignee</Label>
-                  <Select value={assigneeId} onValueChange={setAssigneeId}>
-                    <SelectTrigger id="assignee">
-                      <SelectValue placeholder="Unassigned" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Unassigned</SelectItem>
-                      {members.map((m) => (
-                        <SelectItem key={m.id} value={m.id}>{m.full_name ?? m.email}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Popover open={assigneeOpen} onOpenChange={setAssigneeOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        aria-expanded={assigneeOpen}
+                        className="w-full justify-between font-normal h-9"
+                      >
+                        {assigneeId !== 'none'
+                          ? members.find((m) => m.id === assigneeId)?.full_name ??
+                            members.find((m) => m.id === assigneeId)?.email
+                          : 'Unassigned'}
+                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                      <Command>
+                        <CommandInput placeholder="Search members..." />
+                        <CommandList className="max-h-56 overflow-y-auto">
+                          <CommandEmpty>No member found.</CommandEmpty>
+                          <CommandGroup>
+                            <CommandItem
+                              value="unassigned"
+                              onSelect={() => {
+                                setAssigneeId('none');
+                                setAssigneeOpen(false);
+                              }}
+                            >
+                              <Check
+                                className={cn(
+                                  'mr-2 h-4 w-4',
+                                  assigneeId === 'none' ? 'opacity-100' : 'opacity-0'
+                                )}
+                              />
+                              Unassigned
+                            </CommandItem>
+                            {members.map((m) => (
+                              <CommandItem
+                                key={m.id}
+                                value={`${m.full_name ?? ''} ${m.email}`}
+                                onSelect={() => {
+                                  setAssigneeId(m.id);
+                                  setAssigneeOpen(false);
+                                }}
+                              >
+                                <Check
+                                  className={cn(
+                                    'mr-2 h-4 w-4',
+                                    assigneeId === m.id ? 'opacity-100' : 'opacity-0'
+                                  )}
+                                />
+                                <UserAvatar profile={m} className="h-6 w-6 mr-2" />
+                                <span className="flex flex-col min-w-0">
+                                  <span className="truncate text-sm">{m.full_name ?? m.email}</span>
+                                  {m.full_name && (
+                                    <span className="text-[11px] text-muted-foreground truncate">{m.email}</span>
+                                  )}
+                                </span>
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="dueDate">Due Date</Label>

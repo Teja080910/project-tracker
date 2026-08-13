@@ -1,3 +1,6 @@
+import { WebSocket } from 'ws';
+(globalThis as any).WebSocket = WebSocket;
+
 import { createClient } from '@supabase/supabase-js';
 import * as dotenv from 'dotenv';
 import path from 'path';

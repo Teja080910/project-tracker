@@ -15,7 +15,10 @@ Requires: local Supabase running (see .env) + test users created via
 */
 
 import { readFileSync } from 'fs';
+import { WebSocket } from 'ws';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+
+(globalThis as any).WebSocket = WebSocket;
 
 // ---------------------------------------------------------------------------
 // Env loading (.env uses `KEY = "value"` format with spaces)

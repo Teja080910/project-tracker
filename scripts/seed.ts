@@ -1,3 +1,6 @@
+import { WebSocket } from 'ws';
+(globalThis as any).WebSocket = WebSocket;
+
 /*
 # Seed script — creates demo users, 5 projects with versions and tasks
 
@@ -123,6 +126,12 @@ async function main() {
   let totalVersions = 0;
   let totalTasks = 0;
   for (const p of PROJECTS) {
+    // Skip if project already exists (idempotent)
+    const { data: existing } = await admin.from('projects').select('id').eq('name', p.name).maybeSingle();
+    if (existing) {
+      console.log(`\nProject exists, skipping: ${p.name}`);
+      continue;
+    }
     const { data: project, error: pe } = await admin.from('projects').insert({
       name: p.name,
       description: p.description,
