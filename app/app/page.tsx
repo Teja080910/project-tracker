@@ -204,7 +204,15 @@ export default function DashboardPage() {
               </div>
               My Assigned Tasks
             </CardTitle>
-            <span className="text-xs text-muted-foreground tabular-nums">{myAssignedTasks.length} tasks</span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground tabular-nums">{myAssignedTasks.length} tasks</span>
+              <Button variant="ghost" size="sm" asChild className="h-8 gap-1">
+                <Link href="/app/tasks">
+                  View all
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              </Button>
+            </div>
           </CardHeader>
           <CardContent className="space-y-0.5">
             {myAssignedTasks.length === 0 ? (
@@ -240,7 +248,15 @@ export default function DashboardPage() {
               </div>
               Recently Updated
             </CardTitle>
-            <span className="text-xs text-muted-foreground tabular-nums">{recentTasks.length} tasks</span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground tabular-nums">{recentTasks.length} tasks</span>
+              <Button variant="ghost" size="sm" asChild className="h-8 gap-1">
+                <Link href="/app/tasks">
+                  View all
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              </Button>
+            </div>
           </CardHeader>
           <CardContent className="space-y-0.5">
             {recentTasks.length === 0 ? (
@@ -301,7 +317,7 @@ export default function DashboardPage() {
               {recentProjects.map((project) => (
                 <Link
                   key={project.id}
-                  href={`/app/projects/${project.id}`}
+                  href={`/app/projects/${project.slug}`}
                   className="block p-4 rounded-xl border border-border/60 hover:border-primary/20 transition-all duration-200 group card-hover bg-card/50"
                 >
                   <div className="flex items-center gap-3 mb-3">

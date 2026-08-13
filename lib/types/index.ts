@@ -19,6 +19,7 @@ export interface Profile {
 export interface Project {
   id: string;
   name: string;
+  slug: string;
   description: string | null;
   client_name: string | null;
   status: ProjectStatus;
@@ -40,6 +41,7 @@ export interface Version {
   id: string;
   project_id: string;
   name: string;
+  slug: string;
   description: string | null;
   release_date: string | null;
   status: VersionStatus;
@@ -90,6 +92,7 @@ export interface Comment {
   task_id: string;
   user_id: string;
   message: string;
+  image_path: string | null;
   created_at: string;
   updated_at: string;
   profile?: Profile;

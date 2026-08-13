@@ -7,6 +7,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/shared/empty-state';
+import { PaginationControls } from '@/components/shared/pagination';
 import { supabase } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth-context';
 import { formatRelativeTime } from '@/lib/utils';
@@ -17,6 +18,8 @@ export default function NotificationsPage() {
   const { user } = useAuth();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 10;
 
   const fetchNotifications = useCallback(async () => {
     if (!user) return;
@@ -66,6 +69,11 @@ export default function NotificationsPage() {
   }
 
   const unreadCount = notifications.filter((n) => !n.read).length;
+  const pageItems = notifications.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const totalPages = Math.max(1, Math.ceil(notifications.length / PAGE_SIZE));
+  useEffect(() => {
+    if (page > totalPages) setPage(1);
+  }, [page, totalPages]);
 
   return (
     <div className="space-y-6">
@@ -92,7 +100,7 @@ export default function NotificationsPage() {
         </Card>
       ) : (
         <div className="space-y-2">
-          {notifications.map((n, i) => (
+          {pageItems.map((n, i) => (
             <div
               key={n.id}
               className={`flex items-start gap-3 px-4 py-3 rounded-lg border transition-all duration-200 hover:shadow-soft animate-fade-in-up stagger-${Math.min(i + 1, 7)} ${
@@ -131,6 +139,12 @@ export default function NotificationsPage() {
           ))}
         </div>
       )}
+      <PaginationControls
+        page={page}
+        pageSize={PAGE_SIZE}
+        total={notifications.length}
+        onPageChange={setPage}
+      />
     </div>
   );
 }

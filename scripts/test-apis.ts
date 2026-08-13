@@ -271,13 +271,13 @@ async function main() {
   section('3. Projects API');
   await test('super_admin can create project', async () => {
     const sb = await signInAs('super_admin@test.com');
-    const { error } = await sb.from('projects').insert({ name: 'New Project', owner_id: ids.super_admin });
+    const { error } = await sb.from('projects').insert({ name: `New Project ${Date.now()}`, owner_id: ids.super_admin });
     if (error) throw error;
   });
   for (const role of ['project_admin', 'developer', 'tester', 'viewer'] as Role[]) {
     await test(`${role} can create project (permissive RLS)`, async () => {
       const sb = await signInAs(`${role}@test.com`);
-      const { data, error } = await sb.from('projects').insert({ name: 'X', owner_id: ids[role] }).select().single();
+      const { data, error } = await sb.from('projects').insert({ name: `X ${Date.now()}`, owner_id: ids[role] }).select().single();
       if (error) throw error;
       await sb.from('projects').delete().eq('id', data!.id);
     });
@@ -467,22 +467,22 @@ async function main() {
   });
   await test('developer can create version (permissive RLS)', async () => {
     const sb = await signInAs('developer@test.com');
-    const { error } = await sb.from('versions').insert({ project_id: pid, name: 'v3' });
+    const { error } = await sb.from('versions').insert({ project_id: pid, name: `v3 ${Date.now()}` });
     if (error) throw error;
   });
   await test('tester can create version (permissive RLS)', async () => {
     const sb = await signInAs('tester@test.com');
-    const { error } = await sb.from('versions').insert({ project_id: pid, name: 'v3' });
+    const { error } = await sb.from('versions').insert({ project_id: pid, name: `v3 ${Date.now()}` });
     if (error) throw error;
   });
   await test('viewer can create version (permissive RLS)', async () => {
     const sb = await signInAs('viewer@test.com');
-    const { error } = await sb.from('versions').insert({ project_id: pid, name: 'v3' });
+    const { error } = await sb.from('versions').insert({ project_id: pid, name: `v3 ${Date.now()}` });
     if (error) throw error;
   });
   await test('non-member can create version (permissive RLS)', async () => {
     const sb = await signInAs(nonMemberEmail);
-    const { error } = await sb.from('versions').insert({ project_id: pid, name: 'v3' });
+    const { error } = await sb.from('versions').insert({ project_id: pid, name: `v3 ${Date.now()}` });
     if (error) throw error;
   });
   await expectBlock('create version with missing name', async () => {
@@ -1103,7 +1103,7 @@ async function main() {
     if (!error) throw new Error('Should have been blocked');
   });
   await test('viewer can insert activity log for self on foreign project (permissive RLS)', async () => {
-    const { data: p2 } = await admin.from('projects').insert({ name: 'Foreign', owner_id: ids.super_admin }).select().single();
+    const { data: p2 } = await admin.from('projects').insert({ name: `Foreign ${Date.now()}`, owner_id: ids.super_admin }).select().single();
     const sb = await signInAs('viewer@test.com');
     const { error } = await sb.from('activity_logs').insert({
       project_id: p2!.id, action: 'project.created', entity_type: 'project', entity_id: p2!.id,
@@ -1128,7 +1128,7 @@ async function main() {
   await test('project with long description', async () => {
     const sb = await signInAs('super_admin@test.com');
     const { error } = await sb.from('projects').insert({
-      name: 'Long Desc', owner_id: ids.super_admin, description: 'x'.repeat(5000),
+      name: `Long Desc ${Date.now()}`, owner_id: ids.super_admin, description: 'x'.repeat(5000),
     });
     if (error) throw error;
   });

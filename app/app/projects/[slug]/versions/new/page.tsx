@@ -24,7 +24,7 @@ export default function NewVersionPage() {
   const params = useParams();
   const router = useRouter();
   const { user, profile } = useAuth();
-  const projectId = params.id as string;
+  const projectSlug = params.slug as string;
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [releaseDate, setReleaseDate] = useState('');
@@ -32,10 +32,21 @@ export default function NewVersionPage() {
   const [loading, setLoading] = useState(false);
   const [checking, setChecking] = useState(true);
   const [canManage, setCanManage] = useState(false);
+  const [projectId, setProjectId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user || !profile) return;
     (async () => {
+      const { data: projectData } = await supabase
+        .from('projects')
+        .select('id')
+        .eq('slug', projectSlug)
+        .maybeSingle();
+      if (!projectData) {
+        setChecking(false);
+        return;
+      }
+      setProjectId(projectData.id);
       if (profile.role === 'super_admin') {
         setCanManage(true);
         setChecking(false);
@@ -44,16 +55,17 @@ export default function NewVersionPage() {
       const { data: membership } = await supabase
         .from('project_members')
         .select('role')
-        .eq('project_id', projectId)
+        .eq('project_id', projectData.id)
         .eq('user_id', user.id)
         .maybeSingle();
       setCanManage(membership?.role === 'project_admin' || membership?.role === 'super_admin');
       setChecking(false);
     })();
-  }, [user, profile, projectId]);
+  }, [user, profile, projectSlug]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!projectId) return;
     setLoading(true);
     const { data, error } = await supabase
       .from('versions')
@@ -71,7 +83,7 @@ export default function NewVersionPage() {
       setLoading(false);
     } else {
       toast.success('Version created');
-      router.push(`/app/projects/${projectId}/versions/${data.id}`);
+      router.push(`/app/projects/${projectSlug}/versions/${data.slug}`);
     }
   };
 
@@ -80,7 +92,7 @@ export default function NewVersionPage() {
       <div className="max-w-2xl space-y-6">
         <div className="flex items-center gap-3 animate-fade-in-up">
           <Button variant="ghost" size="icon" asChild className="hover:scale-105 transition-transform duration-200">
-            <Link href={`/app/projects/${projectId}`}>
+            <Link href={`/app/projects/${projectSlug}`}>
               <ArrowLeft className="h-4 w-4" />
             </Link>
           </Button>
@@ -98,7 +110,7 @@ export default function NewVersionPage() {
       <div className="max-w-2xl space-y-6">
         <div className="flex items-center gap-3 animate-fade-in-up">
           <Button variant="ghost" size="icon" asChild className="hover:scale-105 transition-transform duration-200">
-            <Link href={`/app/projects/${projectId}`}>
+            <Link href={`/app/projects/${projectSlug}`}>
               <ArrowLeft className="h-4 w-4" />
             </Link>
           </Button>
@@ -109,7 +121,7 @@ export default function NewVersionPage() {
             <Shield className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
             <p className="text-sm text-muted-foreground">You don&apos;t have permission to create versions.</p>
             <Button variant="outline" className="mt-4" asChild>
-              <Link href={`/app/projects/${projectId}`}>Back to Project</Link>
+              <Link href={`/app/projects/${projectSlug}`}>Back to Project</Link>
             </Button>
           </CardContent>
         </Card>
@@ -121,7 +133,7 @@ export default function NewVersionPage() {
     <div className="max-w-2xl space-y-6">
       <div className="flex items-center gap-3 animate-fade-in-up">
         <Button variant="ghost" size="icon" asChild className="hover:scale-105 transition-transform duration-200">
-          <Link href={`/app/projects/${projectId}`}>
+          <Link href={`/app/projects/${projectSlug}`}>
             <ArrowLeft className="h-4 w-4" />
           </Link>
         </Button>
@@ -184,7 +196,7 @@ export default function NewVersionPage() {
                 Create Version
               </Button>
               <Button type="button" variant="outline" asChild>
-                <Link href={`/app/projects/${projectId}`}>Cancel</Link>
+                <Link href={`/app/projects/${projectSlug}`}>Cancel</Link>
               </Button>
             </div>
           </form>

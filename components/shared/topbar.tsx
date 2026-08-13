@@ -35,7 +35,7 @@ export function Topbar() {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<{
-    projects: { id: string; name: string }[];
+    projects: { id: string; name: string; slug: string }[];
     tasks: { id: string; number: number; title: string }[];
     users: { id: string; full_name: string | null; email: string }[];
   } | null>(null);
@@ -71,7 +71,7 @@ export function Topbar() {
       const [projectsRes, tasksRes, usersRes] = await Promise.all([
         supabase
           .from('projects')
-          .select('id, name')
+          .select('id, name, slug')
           .ilike('name', `%${searchQuery}%`)
           .limit(5),
         supabase
@@ -154,7 +154,7 @@ export function Topbar() {
                 {searchResults.projects.map((p) => (
                   <Link
                     key={p.id}
-                    href={`/app/projects/${p.id}`}
+                    href={`/app/projects/${p.slug}`}
                     className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-lg hover:bg-accent transition-colors duration-150"
                   >
                     <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/10 text-primary">

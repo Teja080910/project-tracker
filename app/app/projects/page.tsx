@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/shared/empty-state';
+import { PaginationControls } from '@/components/shared/pagination';
 import { supabase } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth-context';
 import { getProjectStatusMeta } from '@/lib/constants';
@@ -28,6 +29,8 @@ export default function ProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 10;
 
   const fetchProjects = useCallback(async () => {
     if (!user || !profile) return;
@@ -60,6 +63,12 @@ export default function ProjectsPage() {
       (p.description?.toLowerCase().includes(search.toLowerCase()) ?? false) ||
       (p.client_name?.toLowerCase().includes(search.toLowerCase()) ?? false)
   );
+
+  const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  useEffect(() => {
+    if (page > totalPages) setPage(1);
+  }, [page, totalPages]);
 
   if (loading) {
     return (
@@ -120,10 +129,10 @@ export default function ProjectsPage() {
         </Card>
       ) : (
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filtered.map((project, i) => {
+          {pageItems.map((project, i) => {
             const statusMeta = getProjectStatusMeta(project.status);
             return (
-              <Link key={project.id} href={`/app/projects/${project.id}`}>
+              <Link key={project.id} href={`/app/projects/${project.slug}`}>
                 <Card className={`card-hover cursor-pointer h-full animate-fade-in-up stagger-${Math.min(i + 1, 7)} group relative overflow-hidden`}>
                   <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500/0 via-blue-500/0 to-blue-500/0 group-hover:from-blue-500/30 group-hover:via-blue-500/50 group-hover:to-blue-500/30 transition-all duration-300" />
                   <CardContent className="p-5">
@@ -153,6 +162,12 @@ export default function ProjectsPage() {
           })}
         </div>
       )}
+      <PaginationControls
+        page={page}
+        pageSize={PAGE_SIZE}
+        total={filtered.length}
+        onPageChange={setPage}
+      />
     </div>
   );
 }

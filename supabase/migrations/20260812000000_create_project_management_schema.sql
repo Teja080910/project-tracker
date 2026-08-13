@@ -41,7 +41,8 @@ CREATE TABLE profiles (
 
 CREATE TABLE projects (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  name text NOT NULL,
+  name text NOT NULL UNIQUE,
+  slug text NOT NULL UNIQUE,
   description text,
   client_name text,
   status text NOT NULL DEFAULT 'active' CHECK (status IN ('active','completed','archived')),
@@ -63,11 +64,14 @@ CREATE TABLE versions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id uuid NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   name text NOT NULL,
+  slug text NOT NULL,
   description text,
   release_date date,
   status text NOT NULL DEFAULT 'active' CHECK (status IN ('active','released','archived')),
   created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (project_id, name),
+  UNIQUE (project_id, slug)
 );
 
 CREATE TABLE tags (
@@ -113,8 +117,9 @@ CREATE TABLE task_images (
 CREATE TABLE comments (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   task_id uuid NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
-  user_id uuid NOT NULL DEFAULT auth.uid() REFERENCES auth.users(id) ON DELETE CASCADE,
+  user_id uuid NOT NULL DEFAULT auth.uid() REFERENCES profiles(id) ON DELETE CASCADE,
   message text NOT NULL CHECK (length(btrim(message)) > 0),
+  image_path text,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
@@ -134,7 +139,7 @@ CREATE TABLE activity_logs (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id uuid REFERENCES projects(id) ON DELETE CASCADE,
   task_id uuid REFERENCES tasks(id) ON DELETE CASCADE,
-  user_id uuid REFERENCES auth.users(id) ON DELETE SET NULL,
+  user_id uuid REFERENCES profiles(id) ON DELETE SET NULL,
   action text NOT NULL,
   entity_type text,
   entity_id uuid,
@@ -218,6 +223,24 @@ CREATE TRIGGER set_updated_at_projects BEFORE UPDATE ON projects FOR EACH ROW EX
 CREATE TRIGGER set_updated_at_versions BEFORE UPDATE ON versions FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER set_updated_at_tasks BEFORE UPDATE ON tasks FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER set_updated_at_comments BEFORE UPDATE ON comments FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+CREATE OR REPLACE FUNCTION public.slugify(text)
+RETURNS text LANGUAGE sql IMMUTABLE AS $$
+  SELECT regexp_replace(regexp_replace(lower(trim($1)), '\s+', '-', 'g'), '[^a-z0-9\-]', '', 'g');
+$$;
+
+CREATE OR REPLACE FUNCTION public.set_slug()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  NEW.slug := public.slugify(NEW.name);
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER set_slug_projects BEFORE INSERT OR UPDATE ON projects
+  FOR EACH ROW EXECUTE FUNCTION public.set_slug();
+CREATE TRIGGER set_slug_versions BEFORE INSERT OR UPDATE ON versions
+  FOR EACH ROW EXECUTE FUNCTION public.set_slug();
 
 -- ============================================================
 -- Indexes

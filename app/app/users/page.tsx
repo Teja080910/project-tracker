@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/dialog';
 import { UserAvatar } from '@/components/shared/user-avatar';
 import { EmptyState } from '@/components/shared/empty-state';
+import { PaginationControls } from '@/components/shared/pagination';
 import { supabase } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth-context';
 import { ROLES, getRoleLabel } from '@/lib/constants';
@@ -44,6 +45,8 @@ export default function UsersPage() {
   const [newPassword, setNewPassword] = useState('');
   const [newRole, setNewRole] = useState('viewer');
   const [creating, setCreating] = useState(false);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 10;
 
   const isSuperAdmin = profile?.role === 'super_admin';
 
@@ -74,6 +77,12 @@ export default function UsersPage() {
       (u.full_name?.toLowerCase().includes(search.toLowerCase()) ?? false) ||
       u.email.toLowerCase().includes(search.toLowerCase())
   );
+
+  const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  useEffect(() => {
+    if (page > totalPages) setPage(1);
+  }, [page, totalPages]);
 
   const updateRole = async (userId: string, role: string) => {
     const { error } = await supabase.from('profiles').update({ role }).eq('id', userId);
@@ -199,7 +208,7 @@ export default function UsersPage() {
         </Card>
       ) : (
         <div className="space-y-2">
-          {filtered.map((u, i) => (
+          {pageItems.map((u, i) => (
             <div key={u.id} className={`flex items-center gap-3 px-4 py-3 rounded-lg border border-border hover:shadow-soft hover:border-foreground/20 transition-all duration-200 animate-fade-in-up stagger-${Math.min(i + 1, 7)}`}>
               <UserAvatar profile={u} className="h-9 w-9" />
               <div className="flex-1 min-w-0">
@@ -236,6 +245,12 @@ export default function UsersPage() {
           ))}
         </div>
       )}
+      <PaginationControls
+        page={page}
+        pageSize={PAGE_SIZE}
+        total={filtered.length}
+        onPageChange={setPage}
+      />
     </div>
   );
 }
