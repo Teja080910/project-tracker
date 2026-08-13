@@ -14,6 +14,7 @@ import {
   MessageSquare,
   Calendar,
   User,
+  Pencil,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -86,6 +87,9 @@ export default function TaskDetailPage() {
   const [editing, setEditing] = useState(false);
   const [editTitle, setEditTitle] = useState('');
   const [editDescription, setEditDescription] = useState('');
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editingCommentText, setEditingCommentText] = useState('');
+  const [commentEditLoading, setCommentEditLoading] = useState(false);
   const [myRole, setMyRole] = useState<string | null>(null);
   const [activityPage, setActivityPage] = useState(1);
   const [showAllActivity, setShowAllActivity] = useState(false);
@@ -439,6 +443,29 @@ export default function TaskDetailPage() {
     setCommentLoading(false);
   };
 
+  const saveCommentEdit = async () => {
+    if (!editingCommentId || !user) return;
+    if (!editingCommentText.trim()) {
+      toast.error('Comment cannot be empty');
+      return;
+    }
+    setCommentEditLoading(true);
+    const { error } = await supabase
+      .from('comments')
+      .update({ message: editingCommentText.trim(), edited_at: new Date().toISOString() })
+      .eq('id', editingCommentId)
+      .eq('user_id', user.id);
+    setCommentEditLoading(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    setEditingCommentId(null);
+    setEditingCommentText('');
+    await fetchTask();
+    toast.success('Comment updated');
+  };
+
   const updateTask = async (updates: Partial<Task>) => {
     if (!task || !user) return;
     const { error } = await supabase.from('tasks').update(updates).eq('id', taskId);
@@ -660,6 +687,7 @@ export default function TaskDetailPage() {
                 <div className="flex-1 overflow-y-auto px-4 pt-3 space-y-3 min-h-0">
                   {comments.map((comment) => {
                     const isMine = comment.user_id === user?.id;
+                    const isEditingThis = editingCommentId === comment.id;
                     return (
                       <div key={comment.id} className={`flex gap-2.5 ${isMine ? 'flex-row-reverse' : ''}`}>
                         <UserAvatar profile={comment.profile} className="h-7 w-7 shrink-0 mt-0.5" />
@@ -667,7 +695,7 @@ export default function TaskDetailPage() {
                           <div
                             className={`rounded-2xl px-3.5 py-2.5 text-sm break-words whitespace-pre-wrap ${
                               isMine
-                                ? 'bg-primary text-primary-foreground rounded-tr-sm'
+                                ? 'bg-primary text-primary-foreground rounded-tr-sm [&_*]:selection:bg-white [&_*]:selection:text-primary selection:bg-white selection:text-primary'
                                 : 'bg-secondary/70 text-foreground rounded-tl-sm'
                             }`}
                           >
@@ -679,8 +707,45 @@ export default function TaskDetailPage() {
                                 onClick={() => setPreviewImage(getImageUrl(comment.image_path!))}
                               />
                             )}
-                            {comment.message.trim() !== '' && comment.message.trim() !== ' ' && (
-                              <p>{renderMessage(comment.message)}</p>
+                            {isEditingThis ? (
+                              <div className="space-y-2">
+                                <Textarea
+                                  value={editingCommentText}
+                                  onChange={(e) => setEditingCommentText(e.target.value)}
+                                  rows={2}
+                                  className="bg-background text-foreground text-sm"
+                                  autoFocus
+                                />
+                                <div className="flex gap-1.5 justify-end">
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-7 px-2 text-xs text-primary-foreground hover:text-primary-foreground hover:bg-primary/80"
+                                    onClick={() => { setEditingCommentId(null); setEditingCommentText(''); }}
+                                  >
+                                    Cancel
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    className="h-7 px-2 text-xs"
+                                    onClick={saveCommentEdit}
+                                    disabled={commentEditLoading || !editingCommentText.trim()}
+                                  >
+                                    {commentEditLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
+                                  </Button>
+                                </div>
+                              </div>
+                            ) : (
+                              <>
+                                {comment.message.trim() !== '' && comment.message.trim() !== ' ' && (
+                                  <p>{renderMessage(comment.message)}</p>
+                                )}
+                                {comment.edited_at && (
+                                  <span className={`block mt-1 text-[10px] ${isMine ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
+                                    (edited)
+                                  </span>
+                                )}
+                              </>
                             )}
                           </div>
                           <div className={`flex items-center gap-2 mt-1 px-1 text-[11px] text-muted-foreground ${isMine ? 'flex-row-reverse' : ''}`}>
@@ -688,6 +753,18 @@ export default function TaskDetailPage() {
                               {comment.profile?.full_name ?? comment.profile?.email}
                             </span>
                             <span>{formatRelativeTime(comment.created_at)}</span>
+                            {isMine && !isEditingThis && (
+                              <button
+                                onClick={() => {
+                                  setEditingCommentId(comment.id);
+                                  setEditingCommentText(comment.message.trim() === ' ' ? '' : comment.message);
+                                }}
+                                className="text-muted-foreground/60 hover:text-foreground transition-colors"
+                                title="Edit message"
+                              >
+                                <Pencil className="h-3 w-3" />
+                              </button>
+                            )}
                           </div>
                         </div>
                       </div>

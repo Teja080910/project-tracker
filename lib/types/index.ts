@@ -95,6 +95,7 @@ export interface Comment {
   image_path: string | null;
   created_at: string;
   updated_at: string;
+  edited_at: string | null;
   profile?: Profile;
 }
 

@@ -123,7 +123,8 @@ CREATE TABLE IF NOT EXISTS comments (
   message text NOT NULL CHECK (length(btrim(message)) > 0),
   image_path text,
   created_at timestamptz NOT NULL DEFAULT now(),
-  updated_at timestamptz NOT NULL DEFAULT now()
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  edited_at timestamptz
 );
 
 CREATE TABLE IF NOT EXISTS notifications (
