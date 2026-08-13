@@ -277,6 +277,10 @@ INSERT INTO storage.buckets (id, name, public, avif_autodetection)
 VALUES ('task-screenshots', 'task-screenshots', true, false)
 ON CONFLICT (id) DO NOTHING;
 
+INSERT INTO storage.buckets (id, name, public, avif_autodetection)
+VALUES ('avatars', 'avatars', true, false)
+ON CONFLICT (id) DO NOTHING;
+
 CREATE POLICY "screenshots_read" ON storage.objects
   FOR SELECT TO authenticated USING (bucket_id = 'task-screenshots');
 
@@ -285,3 +289,12 @@ CREATE POLICY "screenshots_insert" ON storage.objects
 
 CREATE POLICY "screenshots_delete" ON storage.objects
   FOR DELETE TO authenticated USING (bucket_id = 'task-screenshots');
+
+CREATE POLICY "avatars_read" ON storage.objects
+  FOR SELECT TO authenticated USING (bucket_id = 'avatars');
+
+CREATE POLICY "avatars_insert" ON storage.objects
+  FOR INSERT TO authenticated WITH CHECK (bucket_id = 'avatars');
+
+CREATE POLICY "avatars_delete" ON storage.objects
+  FOR DELETE TO authenticated USING (bucket_id = 'avatars');
