@@ -52,6 +52,7 @@ import { UserAvatar } from '@/components/shared/user-avatar';
 import { StatusBadge, TypeBadge, PriorityBadge } from '@/components/shared/badges';
 import { EmptyState } from '@/components/shared/empty-state';
 import { PaginationControls } from '@/components/shared/pagination';
+import { DatePicker } from '@/components/shared/date-picker';
 import { supabase } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth-context';
 import { sendNotificationEmail } from '@/lib/email-client';
@@ -565,7 +566,7 @@ export default function TaskDetailPage() {
       <div className="text-center py-12">
         <p className="text-sm text-muted-foreground">Task not found or you don&apos;t have access.</p>
         <Button variant="outline" className="mt-4" asChild>
-          <Link href="/app/tasks">Back to Tasks</Link>
+          <Link href="/app/projects">Back to Projects</Link>
         </Button>
       </div>
     );
@@ -963,11 +964,11 @@ export default function TaskDetailPage() {
               {/* Due date */}
               <div className="space-y-1.5">
                 <label className="text-xs text-muted-foreground">Due Date</label>
-                <Input
-                  type="date"
+                <DatePicker
                   value={task.due_date ?? ''}
-                  onChange={(e) => updateTask({ due_date: e.target.value || null })}
+                  onChange={(v) => updateTask({ due_date: v || null })}
                   disabled={!canEdit}
+                  placeholder="No due date"
                   className="h-9"
                 />
               </div>

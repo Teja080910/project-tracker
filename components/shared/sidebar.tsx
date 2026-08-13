@@ -12,6 +12,7 @@ import {
   User,
   ChevronRight,
   Sparkles,
+  CalendarDays,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/auth-context';
@@ -23,6 +24,7 @@ import { APP_NAME, APP_LOGO_URL, APP_INITIAL } from '@/lib/app-config';
 const navItems = [
   { href: '/app', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/app/projects', label: 'Projects', icon: FolderKanban },
+  { href: '/app/calendar', label: 'Calendar', icon: CalendarDays },
   { href: '/app/notifications', label: 'Notifications', icon: Bell },
   { href: '/app/users', label: 'Users', icon: Users, superAdminOnly: true },
 ];

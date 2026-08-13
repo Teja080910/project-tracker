@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { DatePicker } from '@/components/shared/date-picker';
 import { toast } from 'sonner';
 import { Loader2, ArrowLeft, Shield } from 'lucide-react';
 
@@ -169,11 +170,11 @@ export default function NewVersionPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="releaseDate">Release Date</Label>
-                <Input
+                <DatePicker
                   id="releaseDate"
-                  type="date"
                   value={releaseDate}
-                  onChange={(e) => setReleaseDate(e.target.value)}
+                  onChange={setReleaseDate}
+                  placeholder="No release date"
                 />
               </div>
               <div className="space-y-2">

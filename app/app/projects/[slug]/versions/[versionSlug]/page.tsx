@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Tag, Plus, Calendar, Search, Settings, Loader2 } from 'lucide-react';
+import { ArrowLeft, Tag, Plus, Calendar, Search, Settings, Loader2, Check, ChevronsUpDown } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -23,17 +23,33 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogFooter,
+  DialogClose,
 } from '@/components/ui/dialog';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
 import { UserAvatar } from '@/components/shared/user-avatar';
 import { EmptyState } from '@/components/shared/empty-state';
 import { PaginationControls } from '@/components/shared/pagination';
+import { DatePicker } from '@/components/shared/date-picker';
 import { StatusBadge, TypeBadge, PriorityBadge } from '@/components/shared/badges';
 import { supabase } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth-context';
 import { getVersionStatusMeta, TASK_STATUSES, TASK_TYPES, TASK_PRIORITIES } from '@/lib/constants';
-import { formatDate } from '@/lib/utils';
+import { formatDate, cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import type { Version, Task, Project } from '@/lib/types';
+import type { Version, Task, Project, Profile } from '@/lib/types';
 
 export default function VersionDetailPage() {
   const params = useParams();
@@ -59,6 +75,18 @@ export default function VersionDetailPage() {
   const [saving, setSaving] = useState(false);
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 10;
+
+  // New task modal state
+  const [taskModalOpen, setTaskModalOpen] = useState(false);
+  const [taskTitle, setTaskTitle] = useState('');
+  const [taskDescription, setTaskDescription] = useState('');
+  const [taskType, setTaskType] = useState('task');
+  const [taskPriority, setTaskPriority] = useState('medium');
+  const [taskAssigneeId, setTaskAssigneeId] = useState('none');
+  const [taskAssigneeOpen, setTaskAssigneeOpen] = useState(false);
+  const [taskDueDate, setTaskDueDate] = useState('');
+  const [taskCreating, setTaskCreating] = useState(false);
+  const [members, setMembers] = useState<Profile[]>([]);
 
   const fetchData = useCallback(async () => {
     if (!user) return;
@@ -93,6 +121,18 @@ export default function VersionDetailPage() {
       .order('created_at', { ascending: false });
 
     setTasks((tasksData as unknown as Task[]) ?? []);
+
+    // Fetch project members for the assignee picker (includes owner)
+    const { data: membersData } = await supabase
+      .from('project_members')
+      .select('profile:profiles(*)')
+      .eq('project_id', projectData.id);
+    const memberProfiles = (membersData?.map((m) => m.profile) as unknown as Profile[]) ?? [];
+    const { data: ownerData } = await supabase.from('profiles').select('*').eq('id', projectData.owner_id).maybeSingle();
+    if (ownerData && !memberProfiles.some((p) => p.id === ownerData.id)) {
+      memberProfiles.push(ownerData as Profile);
+    }
+    setMembers(memberProfiles);
 
     setLoading(false);
   }, [user, projectSlug, versionSlug]);
@@ -151,6 +191,84 @@ export default function VersionDetailPage() {
       await fetchData();
       toast.success('Version updated');
     }
+  };
+
+  const createTask = async () => {
+    if (!user || !project || !version) return;
+    if (!taskTitle.trim()) {
+      toast.error('Task title is required');
+      return;
+    }
+    setTaskCreating(true);
+
+    // Next task number for this project
+    const { data: maxTask } = await supabase
+      .from('tasks')
+      .select('number')
+      .eq('project_id', project.id)
+      .order('number', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const nextNumber = ((maxTask as { number: number } | null)?.number ?? 0) + 1;
+
+    const { data, error } = await supabase
+      .from('tasks')
+      .insert({
+        number: nextNumber,
+        title: taskTitle.trim(),
+        description: taskDescription.trim() || null,
+        project_id: project.id,
+        version_id: version.id,
+        type: taskType,
+        priority: taskPriority,
+        assignee_id: taskAssigneeId === 'none' ? null : taskAssigneeId,
+        reporter_id: user.id,
+        due_date: taskDueDate || null,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      toast.error(error.message);
+      setTaskCreating(false);
+      return;
+    }
+
+    try {
+      await supabase.from('activity_logs').insert({
+        project_id: project.id,
+        task_id: data.id,
+        user_id: user.id,
+        action: `created ${taskType}`,
+        entity_type: 'task',
+        entity_id: data.id,
+      });
+
+      if (taskAssigneeId !== 'none' && taskAssigneeId !== user.id) {
+        await supabase.from('notifications').insert({
+          user_id: taskAssigneeId,
+          actor_id: user.id,
+          project_id: project.id,
+          type: 'task_assigned',
+          title: `New ${taskType} assigned: #${data.number}`,
+          body: taskTitle.trim(),
+          link: `/app/tasks/${data.id}`,
+        });
+      }
+
+      setTaskModalOpen(false);
+      setTaskTitle('');
+      setTaskDescription('');
+      setTaskType('task');
+      setTaskPriority('medium');
+      setTaskAssigneeId('none');
+      setTaskDueDate('');
+      await fetchData();
+      toast.success('Task created');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Task created but setup failed');
+    }
+    setTaskCreating(false);
   };
 
   if (loading) {
@@ -215,14 +333,156 @@ export default function VersionDetailPage() {
             <Settings className="h-4 w-4 mr-2" />
             Settings
           </Button>
-          <Button asChild>
-            <Link href={`/app/tasks/new?project=${projectSlug}&version=${versionSlug}`}>
-              <Plus className="h-4 w-4 mr-2" />
-              New Task
-            </Link>
+          <Button onClick={() => setTaskModalOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            New Task
           </Button>
         </div>
       </div>
+
+      {/* New Task modal */}
+      <Dialog open={taskModalOpen} onOpenChange={setTaskModalOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>New Task in {version.name}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Title *</label>
+              <Input
+                value={taskTitle}
+                onChange={(e) => setTaskTitle(e.target.value)}
+                placeholder="e.g. Fix login page styling"
+                autoFocus
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Description</label>
+              <Textarea
+                value={taskDescription}
+                onChange={(e) => setTaskDescription(e.target.value)}
+                rows={3}
+                placeholder="Describe the task in detail..."
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Type</label>
+                <Select value={taskType} onValueChange={setTaskType}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TASK_TYPES.map((t) => (
+                      <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Priority</label>
+                <Select value={taskPriority} onValueChange={setTaskPriority}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TASK_PRIORITIES.map((p) => (
+                      <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Assignee</label>
+                <Popover open={taskAssigneeOpen} onOpenChange={setTaskAssigneeOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={taskAssigneeOpen}
+                      className="w-full justify-between font-normal"
+                    >
+                      {taskAssigneeId !== 'none'
+                        ? members.find((m) => m.id === taskAssigneeId)?.full_name ??
+                          members.find((m) => m.id === taskAssigneeId)?.email
+                        : 'Unassigned'}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Search members..." />
+                      <CommandList className="max-h-56 overflow-y-auto">
+                        <CommandEmpty>No member found.</CommandEmpty>
+                        <CommandGroup>
+                          <CommandItem
+                            value="unassigned"
+                            onSelect={() => {
+                              setTaskAssigneeId('none');
+                              setTaskAssigneeOpen(false);
+                            }}
+                          >
+                            <Check
+                              className={cn(
+                                'mr-2 h-4 w-4',
+                                taskAssigneeId === 'none' ? 'opacity-100' : 'opacity-0'
+                              )}
+                            />
+                            Unassigned
+                          </CommandItem>
+                          {members.map((m) => (
+                            <CommandItem
+                              key={m.id}
+                              value={`${m.full_name ?? ''} ${m.email}`}
+                              onSelect={() => {
+                                setTaskAssigneeId(m.id);
+                                setTaskAssigneeOpen(false);
+                              }}
+                            >
+                              <Check
+                                className={cn(
+                                  'mr-2 h-4 w-4',
+                                  taskAssigneeId === m.id ? 'opacity-100' : 'opacity-0'
+                                )}
+                              />
+                              <UserAvatar profile={m} className="h-6 w-6 mr-2" />
+                              <span className="flex flex-col min-w-0">
+                                <span className="truncate text-sm">{m.full_name ?? m.email}</span>
+                                {m.full_name && (
+                                  <span className="text-[11px] text-muted-foreground truncate">{m.email}</span>
+                                )}
+                              </span>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Due Date</label>
+                <DatePicker
+                  value={taskDueDate}
+                  onChange={setTaskDueDate}
+                  placeholder="No due date"
+                />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline">Cancel</Button>
+            </DialogClose>
+            <Button onClick={createTask} disabled={taskCreating}>
+              {taskCreating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Create Task
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
         <DialogContent>
@@ -246,10 +506,10 @@ export default function VersionDetailPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">Release Date</label>
-                <Input
-                  type="date"
+                <DatePicker
                   value={editReleaseDate}
-                  onChange={(e) => setEditReleaseDate(e.target.value)}
+                  onChange={setEditReleaseDate}
+                  placeholder="No release date"
                 />
               </div>
               <div className="space-y-2">
@@ -356,10 +616,8 @@ export default function VersionDetailPage() {
               description={tasks.length === 0 ? "Create a task for this version" : "Try adjusting your filters"}
               action={
                 tasks.length === 0 ? (
-                  <Button size="sm" asChild>
-                    <Link href={`/app/tasks/new?project=${projectSlug}&version=${versionSlug}`}>
-                      New Task
-                    </Link>
+                  <Button size="sm" onClick={() => setTaskModalOpen(true)}>
+                    New Task
                   </Button>
                 ) : undefined
               }

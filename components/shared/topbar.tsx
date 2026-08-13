@@ -355,6 +355,7 @@ function MobileNav({ onNavigate }: { onNavigate: () => void }) {
   const items = [
     { href: '/app', label: 'Dashboard' },
     { href: '/app/projects', label: 'Projects' },
+    { href: '/app/calendar', label: 'Calendar' },
     { href: '/app/notifications', label: 'Notifications' },
     ...(isSuperAdmin ? [{ href: '/app/users', label: 'Users' }] : []),
     { href: '/app/profile', label: 'Profile' },

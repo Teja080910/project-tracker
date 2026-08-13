@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase/client';
@@ -16,12 +16,14 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/lib/auth-context';
 import { sendNotificationEmail } from '@/lib/email-client';
 import { TASK_TYPES, TASK_PRIORITIES } from '@/lib/constants';
 import { StatusBadge, TypeBadge } from '@/components/shared/badges';
 import { UserAvatar } from '@/components/shared/user-avatar';
 import { EmptyState } from '@/components/shared/empty-state';
+import { DatePicker } from '@/components/shared/date-picker';
 import {
   Popover,
   PopoverContent,
@@ -42,6 +44,14 @@ import { Loader2, ArrowLeft, Plus, FolderKanban } from 'lucide-react';
 import type { Project, Version, Profile, Task } from '@/lib/types';
 
 export default function NewTaskPage() {
+  return (
+    <Suspense fallback={<div className="max-w-3xl space-y-6"><Skeleton className="h-8 w-48" /><Skeleton className="h-64" /></div>}>
+      <NewTaskContent />
+    </Suspense>
+  );
+}
+
+function NewTaskContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, profile } = useAuth();
@@ -64,6 +74,16 @@ export default function NewTaskPage() {
   const [versions, setVersions] = useState<Version[]>([]);
   const [members, setMembers] = useState<Profile[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const formRef = useRef<HTMLDivElement>(null);
+
+  // Scroll to the form when it opens
+  useEffect(() => {
+    if (showForm) {
+      setTimeout(() => {
+        formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 100);
+    }
+  }, [showForm]);
 
   const fetchProjects = useCallback(async () => {
     if (!user || !profile) return;
@@ -226,11 +246,17 @@ export default function NewTaskPage() {
     }
   };
 
+  const backHref = presetProject
+    ? presetVersion
+      ? `/app/projects/${presetProject}/versions/${presetVersion}`
+      : `/app/projects/${presetProject}`
+    : '/app/tasks';
+
   return (
     <div className="max-w-3xl space-y-6">
       <div className="flex items-center gap-3 animate-fade-in-up">
         <Button variant="ghost" size="icon" asChild className="hover:scale-105 transition-transform duration-200">
-          <Link href="/app/tasks">
+          <Link href={backHref}>
             <ArrowLeft className="h-4 w-4" />
           </Link>
         </Button>
@@ -304,54 +330,9 @@ export default function NewTaskPage() {
         </Card>
       )}
 
-      {/* Task list for selected project/version */}
-      {projectId && (
-        <Card className="animate-fade-in-up stagger-1">
-          <CardHeader className="flex flex-row items-center justify-between pb-3">
-            <CardTitle className="text-base font-semibold flex items-center gap-2">
-              <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/10 text-primary">
-                <FolderKanban className="h-3.5 w-3.5" />
-              </div>
-              {versionId !== 'none'
-                ? `Tasks in ${versions.find((v) => v.id === versionId)?.name ?? 'version'} (${tasks.length})`
-                : `All Tasks (${tasks.length})`}
-            </CardTitle>
-            <Button size="sm" onClick={() => setShowForm((s) => !s)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Add Task
-            </Button>
-          </CardHeader>
-          <CardContent>
-            {tasks.length === 0 ? (
-              <EmptyState
-                icon={FolderKanban}
-                title="No tasks yet"
-                description="Click Add Task to create the first one"
-              />
-            ) : (
-              <div className="space-y-1">
-                {tasks.map((task) => (
-                  <Link
-                    key={task.id}
-                    href={`/app/tasks/${task.id}`}
-                    className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-secondary/50 transition-all duration-200 border border-transparent hover:border-border hover:shadow-soft group row-hover"
-                  >
-                    <TypeBadge type={task.type} />
-                    <span className="text-xs text-muted-foreground">#{task.number}</span>
-                    <span className="text-sm flex-1 truncate">{task.title}</span>
-                    {task.assignee && <UserAvatar profile={task.assignee} className="h-6 w-6" />}
-                    <StatusBadge status={task.status} />
-                  </Link>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Task form (no project/version fields) */}
+      {/* Task form (no project/version fields) — shown at top when Add Task clicked */}
       {projectId && showForm && (
-        <Card className="card-hover animate-fade-in-up stagger-1">
+        <Card ref={formRef} className="card-hover animate-fade-in-up stagger-1 scroll-mt-20">
           <CardHeader>
             <CardTitle className="text-base">Task Details</CardTitle>
           </CardHeader>
@@ -476,11 +457,11 @@ export default function NewTaskPage() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="dueDate">Due Date</Label>
-                  <Input
+                  <DatePicker
                     id="dueDate"
-                    type="date"
                     value={dueDate}
-                    onChange={(e) => setDueDate(e.target.value)}
+                    onChange={setDueDate}
+                    placeholder="No due date"
                   />
                 </div>
               </div>
@@ -494,6 +475,51 @@ export default function NewTaskPage() {
                 </Button>
               </div>
             </form>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Task list for selected project/version */}
+      {projectId && (
+        <Card className="animate-fade-in-up stagger-1">
+          <CardHeader className="flex flex-row items-center justify-between pb-3">
+            <CardTitle className="text-base font-semibold flex items-center gap-2">
+              <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/10 text-primary">
+                <FolderKanban className="h-3.5 w-3.5" />
+              </div>
+              {versionId !== 'none'
+                ? `Tasks in ${versions.find((v) => v.id === versionId)?.name ?? 'version'} (${tasks.length})`
+                : `All Tasks (${tasks.length})`}
+            </CardTitle>
+            <Button size="sm" onClick={() => setShowForm((s) => !s)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Task
+            </Button>
+          </CardHeader>
+          <CardContent>
+            {tasks.length === 0 ? (
+              <EmptyState
+                icon={FolderKanban}
+                title="No tasks yet"
+                description="Click Add Task to create the first one"
+              />
+            ) : (
+              <div className="space-y-1">
+                {tasks.map((task) => (
+                  <Link
+                    key={task.id}
+                    href={`/app/tasks/${task.id}`}
+                    className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-secondary/50 transition-all duration-200 border border-transparent hover:border-border hover:shadow-soft group row-hover"
+                  >
+                    <TypeBadge type={task.type} />
+                    <span className="text-xs text-muted-foreground">#{task.number}</span>
+                    <span className="text-sm flex-1 truncate">{task.title}</span>
+                    {task.assignee && <UserAvatar profile={task.assignee} className="h-6 w-6" />}
+                    <StatusBadge status={task.status} />
+                  </Link>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
