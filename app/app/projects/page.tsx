@@ -2,18 +2,36 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { FolderKanban, Plus, Search } from 'lucide-react';
+import { FolderKanban, Plus, Search, Loader2 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogClose,
+} from '@/components/ui/dialog';
 import { EmptyState } from '@/components/shared/empty-state';
 import { PaginationControls } from '@/components/shared/pagination';
 import { supabase } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth-context';
 import { getProjectStatusMeta } from '@/lib/constants';
 import { formatDate } from '@/lib/utils';
+import { toast } from 'sonner';
 import type { Project } from '@/lib/types';
 
 const colorClasses: Record<string, string> = {
@@ -31,6 +49,14 @@ export default function ProjectsPage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 10;
+
+  // New project modal state
+  const [modalOpen, setModalOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [clientName, setClientName] = useState('');
+  const [status, setStatus] = useState('active');
+  const [creating, setCreating] = useState(false);
 
   const fetchProjects = useCallback(async () => {
     if (!user || !profile) return;
@@ -56,6 +82,56 @@ export default function ProjectsPage() {
   useEffect(() => {
     fetchProjects();
   }, [fetchProjects]);
+
+  const createProject = async () => {
+    if (!user) return;
+    if (!name.trim()) {
+      toast.error('Project name is required');
+      return;
+    }
+    setCreating(true);
+    const { data, error } = await supabase
+      .from('projects')
+      .insert({
+        name: name.trim(),
+        description: description.trim() || null,
+        client_name: clientName.trim() || null,
+        status,
+        owner_id: user.id,
+      })
+      .select()
+      .single();
+    if (error) {
+      toast.error(error.message);
+      setCreating(false);
+      return;
+    }
+
+    try {
+      await supabase.from('project_members').insert({
+        project_id: data.id,
+        user_id: user.id,
+        role: 'project_admin',
+      });
+      await supabase.from('activity_logs').insert({
+        project_id: data.id,
+        user_id: user.id,
+        action: 'created project',
+        entity_type: 'project',
+        entity_id: data.id,
+      });
+      setModalOpen(false);
+      setName('');
+      setDescription('');
+      setClientName('');
+      setStatus('active');
+      await fetchProjects();
+      toast.success('Project created');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Project created but setup failed');
+    }
+    setCreating(false);
+  };
 
   const filtered = projects.filter(
     (p) =>
@@ -91,14 +167,76 @@ export default function ProjectsPage() {
           <p className="text-sm text-muted-foreground mt-1">{projects.length} total</p>
         </div>
         {profile?.role === 'super_admin' && (
-          <Button asChild className="animate-fade-in-scale">
-            <Link href="/app/projects/new">
-              <Plus className="h-4 w-4 mr-2" />
-              New Project
-            </Link>
+          <Button className="animate-fade-in-scale" onClick={() => setModalOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            New Project
           </Button>
         )}
       </div>
+
+      {/* New Project modal */}
+      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>New Project</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="name">Name *</Label>
+              <Input
+                id="name"
+                placeholder="e.g. Mobile App"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="description">Description</Label>
+              <Textarea
+                id="description"
+                placeholder="Brief description of the project..."
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={3}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="client">Client Name</Label>
+                <Input
+                  id="client"
+                  placeholder="e.g. Acme Corp"
+                  value={clientName}
+                  onChange={(e) => setClientName(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="status">Status</Label>
+                <Select value={status} onValueChange={setStatus}>
+                  <SelectTrigger id="status">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="completed">Completed</SelectItem>
+                    <SelectItem value="archived">Archived</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline">Cancel</Button>
+            </DialogClose>
+            <Button onClick={createProject} disabled={creating}>
+              {creating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Create Project
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <div className="relative max-w-sm animate-fade-in-up stagger-1">
         <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -119,9 +257,7 @@ export default function ProjectsPage() {
               description={search ? "Try a different search term" : "Create your first project to get started"}
               action={
                 !search && profile?.role === 'super_admin' ? (
-                  <Button asChild>
-                    <Link href="/app/projects/new">New Project</Link>
-                  </Button>
+                  <Button onClick={() => setModalOpen(true)}>New Project</Button>
                 ) : undefined
               }
             />

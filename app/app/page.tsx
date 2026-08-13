@@ -12,7 +12,6 @@ import {
   ArrowRight,
   Activity,
   TrendingUp,
-  Plus,
   Clock,
   Users,
 } from 'lucide-react';
@@ -161,12 +160,6 @@ export default function DashboardPage() {
             Welcome back, <span className="font-medium text-foreground">{profile?.full_name?.split(' ')[0] ?? profile?.email}</span>
           </p>
         </div>
-        <Button asChild className="h-9 gap-2 shadow-glow">
-          <Link href="/app/tasks/new">
-            <Plus className="h-4 w-4" />
-            New Task
-          </Link>
-        </Button>
       </div>
 
       {/* Stat Cards */}
@@ -308,7 +301,7 @@ export default function DashboardPage() {
               description="Create your first project to get started"
               action={
                 <Button size="sm" asChild>
-                  <Link href="/app/projects/new">New Project</Link>
+                  <Link href="/app/projects">New Project</Link>
                 </Button>
               }
             />
