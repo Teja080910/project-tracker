@@ -240,67 +240,27 @@ export default function TasksPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="rounded-xl border border-border/60 overflow-hidden animate-fade-in-up stagger-2">
-          {/* Table header */}
-          <div className="hidden md:grid grid-cols-12 gap-3 px-4 py-2.5 bg-secondary/40 border-b border-border/60 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-            <div className="col-span-1">Type</div>
-            <div className="col-span-1">#</div>
-            <div className="col-span-4">Title</div>
-            <div className="col-span-2">Project</div>
-            <div className="col-span-1">Priority</div>
-            <div className="col-span-1">Assignee</div>
-            <div className="col-span-1">Status</div>
-            <div className="col-span-1 text-right">Updated</div>
-          </div>
-
-          {/* Rows */}
-          <div className="divide-y divide-border/50">
-            {pageItems.map((task, i) => (
-              <Link
-                key={task.id}
-                href={`/app/tasks/${task.id}`}
-                className={`block md:grid md:grid-cols-12 md:gap-3 md:items-center px-4 py-3 hover:bg-secondary/40 transition-all duration-200 group animate-fade-in-up stagger-${Math.min(i + 1, 7)} row-hover`}
-              >
-                {/* Mobile layout */}
-                <div className="md:hidden space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <TypeBadge type={task.type} />
-                      <span className="text-xs text-muted-foreground font-mono">#{task.number}</span>
-                    </div>
-                    <StatusBadge status={task.status} />
-                  </div>
-                  <p className="text-sm font-medium truncate group-hover:text-primary transition-colors duration-200">
-                    {task.title}
-                  </p>
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground min-w-0">
-                      {task.project ? (
-                        <>
-                          <FolderKanban className="h-3 w-3 shrink-0" />
-                          <span className="truncate">{task.project.name}</span>
-                        </>
-                      ) : (
-                        <span className="text-muted-foreground/50">—</span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <PriorityBadge priority={task.priority} />
-                      {task.assignee && <UserAvatar profile={task.assignee} className="h-5 w-5 shrink-0" />}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Desktop layout */}
-                <div className="hidden md:contents">
-                  <div className="col-span-1">
+        <div className="space-y-3 animate-fade-in-up stagger-2">
+          {pageItems.map((task, i) => (
+            <Link
+              key={task.id}
+              href={`/app/tasks/${task.id}`}
+              className={`block rounded-xl border border-border/70 bg-card/60 hover:border-primary/30 hover:shadow-soft hover:bg-card transition-all duration-200 group animate-fade-in-up stagger-${Math.min(i + 1, 7)} overflow-hidden`}
+            >
+              {/* Mobile layout */}
+              <div className="md:hidden p-4 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
                     <TypeBadge type={task.type} />
+                    <span className="text-xs text-muted-foreground font-mono">#{task.number}</span>
                   </div>
-                  <div className="col-span-1 text-xs text-muted-foreground font-mono">#{task.number}</div>
-                  <div className="col-span-4 text-sm font-medium truncate group-hover:text-primary transition-colors duration-200">
-                    {task.title}
-                  </div>
-                  <div className="col-span-2 flex items-center gap-1.5 text-xs text-muted-foreground min-w-0">
+                  <StatusBadge status={task.status} />
+                </div>
+                <p className="text-sm font-semibold leading-snug group-hover:text-primary transition-colors duration-200">
+                  {task.title}
+                </p>
+                <div className="flex items-center justify-between gap-2 pt-2 border-t border-border/50">
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground min-w-0">
                     {task.project ? (
                       <>
                         <FolderKanban className="h-3 w-3 shrink-0" />
@@ -310,39 +270,69 @@ export default function TasksPage() {
                       <span className="text-muted-foreground/50">—</span>
                     )}
                   </div>
-                  <div className="col-span-1">
+                  <div className="flex items-center gap-2">
                     <PriorityBadge priority={task.priority} />
-                  </div>
-                  <div className="col-span-1 flex items-center gap-1.5 min-w-0">
-                    {task.assignee ? (
-                      <>
-                        <UserAvatar profile={task.assignee} className="h-5 w-5 shrink-0" />
-                        <span className="text-xs text-muted-foreground truncate hidden lg:inline">
-                          {task.assignee.full_name ?? task.assignee.email}
-                        </span>
-                      </>
-                    ) : (
-                      <span className="text-xs text-muted-foreground/50">Unassigned</span>
-                    )}
-                  </div>
-                  <div className="col-span-1">
-                    <StatusBadge status={task.status} />
-                  </div>
-                  <div className="col-span-1 flex items-center justify-end gap-1.5 text-[11px] text-muted-foreground/70">
-                    <Clock className="h-3 w-3" />
-                    {formatRelativeTime(task.updated_at)}
-                    <ArrowRight className="h-3.5 w-3.5 opacity-0 group-hover:opacity-100 transition-all duration-200 group-hover:translate-x-0.5" />
+                    {task.assignee && <UserAvatar profile={task.assignee} className="h-5 w-5 shrink-0" />}
                   </div>
                 </div>
-              </Link>
-            ))}
-          </div>
+              </div>
+
+              {/* Desktop layout */}
+              <div className="hidden md:flex items-center gap-4 px-5 py-4">
+                <div className="w-24 shrink-0">
+                  <TypeBadge type={task.type} />
+                </div>
+                <div className="w-14 shrink-0 text-xs text-muted-foreground font-mono">#{task.number}</div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold truncate group-hover:text-primary transition-colors duration-200">
+                    {task.title}
+                  </p>
+                  <div className="flex items-center gap-2 mt-0.5 text-[11px] text-muted-foreground">
+                    {task.project && (
+                      <span className="flex items-center gap-1 min-w-0">
+                        <FolderKanban className="h-3 w-3 shrink-0" />
+                        <span className="truncate">{task.project.name}</span>
+                      </span>
+                    )}
+                    {task.version && (
+                      <span className="flex items-center gap-1 min-w-0">
+                        <span className="text-muted-foreground/40">·</span>
+                        <span className="truncate">{task.version.name}</span>
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="w-24 shrink-0 flex justify-center">
+                  <PriorityBadge priority={task.priority} />
+                </div>
+                <div className="w-40 shrink-0 flex items-center gap-2 min-w-0">
+                  {task.assignee ? (
+                    <>
+                      <UserAvatar profile={task.assignee} className="h-6 w-6 shrink-0" />
+                      <span className="text-xs text-muted-foreground truncate">
+                        {task.assignee.full_name ?? task.assignee.email}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-xs text-muted-foreground/50">Unassigned</span>
+                  )}
+                </div>
+                <div className="w-28 shrink-0 flex justify-center">
+                  <StatusBadge status={task.status} />
+                </div>
+                <div className="w-24 shrink-0 flex items-center justify-end gap-1.5 text-[11px] text-muted-foreground/70">
+                  <Clock className="h-3 w-3" />
+                  {formatRelativeTime(task.updated_at)}
+                </div>
+                <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100 transition-all duration-200 group-hover:translate-x-0.5" />
+              </div>
+            </Link>
+          ))}
           <PaginationControls
             page={page}
             pageSize={PAGE_SIZE}
             total={filtered.length}
             onPageChange={setPage}
-            className="px-4 py-3 border-t border-border/60"
           />
         </div>
       )}

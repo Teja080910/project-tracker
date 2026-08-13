@@ -14,6 +14,9 @@ import {
   UserPlus,
   X,
   Settings,
+  Check,
+  Loader2,
+  Search,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -37,20 +40,6 @@ import {
   DialogFooter,
   DialogClose,
 } from '@/components/ui/dialog';
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover';
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from '@/components/ui/command';
-import { Check, ChevronsUpDown, Loader2 } from 'lucide-react';
 import { UserAvatar } from '@/components/shared/user-avatar';
 import { EmptyState } from '@/components/shared/empty-state';
 import { PaginationControls } from '@/components/shared/pagination';
@@ -75,7 +64,9 @@ export default function ProjectDetailPage() {
   const [addMemberOpen, setAddMemberOpen] = useState(false);
   const [newMemberId, setNewMemberId] = useState('');
   const [newMemberRole, setNewMemberRole] = useState('developer');
-  const [userSearchOpen, setUserSearchOpen] = useState(false);
+  const [memberSearch, setMemberSearch] = useState('');
+  const [memberPage, setMemberPage] = useState(1);
+  const MEMBER_PAGE_SIZE = 10;
   const [editName, setEditName] = useState('');
   const [editDescription, setEditDescription] = useState('');
   const [editClientName, setEditClientName] = useState('');
@@ -118,7 +109,7 @@ export default function ProjectDetailPage() {
     const myMembership = (membersRes.data as unknown as ProjectMember[])?.find((m) => m.user_id === user.id);
     setMyRole(myMembership?.role ?? null);
 
-    if (isSuperAdmin) {
+    if (isSuperAdmin || myMembership?.role === 'project_admin' || projectData.owner_id === user.id) {
       const { data: profilesData } = await supabase.from('profiles').select('*').eq('disabled', false);
       setAllProfiles((profilesData as Profile[]) ?? []);
     }
@@ -205,6 +196,20 @@ export default function ProjectDetailPage() {
   const availableProfiles = allProfiles.filter(
     (p) => !members.some((m) => m.user_id === p.id)
   );
+
+  const memberSearchResults = availableProfiles.filter((p) => {
+    const q = memberSearch.toLowerCase();
+    return (
+      (p.full_name ?? '').toLowerCase().includes(q) ||
+      p.email.toLowerCase().includes(q)
+    );
+  });
+
+  const memberPageItems = memberSearchResults.slice((memberPage - 1) * MEMBER_PAGE_SIZE, memberPage * MEMBER_PAGE_SIZE);
+  const memberTotalPages = Math.max(1, Math.ceil(memberSearchResults.length / MEMBER_PAGE_SIZE));
+  useEffect(() => {
+    if (memberPage > memberTotalPages) setMemberPage(1);
+  }, [memberPage, memberTotalPages, memberSearch]);
 
   const pageVersions = versions.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const totalPages = Math.max(1, Math.ceil(versions.length / PAGE_SIZE));
@@ -469,51 +474,81 @@ export default function ProjectDetailPage() {
                 <div className="space-y-4 py-2">
                   <div className="space-y-2">
                     <label className="text-sm font-medium">User</label>
-                    <Popover open={userSearchOpen} onOpenChange={setUserSearchOpen}>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          role="combobox"
-                          aria-expanded={userSearchOpen}
-                          className="w-full justify-between font-normal"
-                        >
-                          {newMemberId
-                            ? availableProfiles.find((p) => p.id === newMemberId)?.full_name ??
-                              availableProfiles.find((p) => p.id === newMemberId)?.email
-                            : 'Select a user...'}
-                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-                        <Command>
-                          <CommandInput placeholder="Search users..." />
-                          <CommandList>
-                            <CommandEmpty>No user found.</CommandEmpty>
-                            <CommandGroup>
-                              {availableProfiles.map((p) => (
-                                <CommandItem
-                                  key={p.id}
-                                  value={p.full_name ?? p.email}
-                                  onSelect={() => {
-                                    setNewMemberId(p.id);
-                                    setUserSearchOpen(false);
-                                  }}
+                    <div className="relative">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Search by name or email..."
+                        value={memberSearch}
+                        onChange={(e) => setMemberSearch(e.target.value)}
+                        className="pl-8 h-9"
+                      />
+                    </div>
+                    <div className="border border-border rounded-lg">
+                      {memberSearchResults.length === 0 ? (
+                        <p className="py-6 text-center text-sm text-muted-foreground">No user found.</p>
+                      ) : (
+                        <>
+                          <div className="max-h-64 overflow-y-auto divide-y divide-border/50">
+                            {memberPageItems.map((p) => (
+                              <button
+                                key={p.id}
+                                type="button"
+                                onClick={() => {
+                                  setNewMemberId(p.id);
+                                }}
+                                className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-none text-left transition-colors ${
+                                  newMemberId === p.id ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/50'
+                                }`}
+                              >
+                                <Check
+                                  className={cn(
+                                    'h-4 w-4 shrink-0',
+                                    newMemberId === p.id ? 'opacity-100' : 'opacity-0'
+                                  )}
+                                />
+                                <UserAvatar profile={p} className="h-7 w-7 shrink-0" />
+                                <span className="flex flex-col min-w-0">
+                                  <span className="truncate text-sm">{p.full_name ?? p.email}</span>
+                                  {p.full_name && (
+                                    <span className="text-[11px] text-muted-foreground truncate mt-0.5">{p.email}</span>
+                                  )}
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                          {memberSearchResults.length > MEMBER_PAGE_SIZE && (
+                            <div className="flex items-center justify-between gap-2 px-2 py-1.5 border-t border-border/60 bg-secondary/30">
+                              <p className="text-[11px] text-muted-foreground">
+                                {memberSearchResults.length} users
+                              </p>
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 px-2 text-xs"
+                                  disabled={memberPage <= 1}
+                                  onClick={() => setMemberPage(memberPage - 1)}
                                 >
-                                  <Check
-                                    className={cn(
-                                      'mr-2 h-4 w-4',
-                                      newMemberId === p.id ? 'opacity-100' : 'opacity-0'
-                                    )}
-                                  />
-                                  <UserAvatar profile={p} className="h-6 w-6 mr-2" />
-                                  <span className="truncate">{p.full_name ?? p.email}</span>
-                                </CommandItem>
-                              ))}
-                            </CommandGroup>
-                          </CommandList>
-                        </Command>
-                      </PopoverContent>
-                    </Popover>
+                                  Prev
+                                </Button>
+                                <span className="text-[11px] text-muted-foreground px-1">
+                                  {memberPage} / {memberTotalPages}
+                                </span>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 px-2 text-xs"
+                                  disabled={memberPage >= memberTotalPages}
+                                  onClick={() => setMemberPage(memberPage + 1)}
+                                >
+                                  Next
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Role</label>

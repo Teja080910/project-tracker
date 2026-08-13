@@ -7,7 +7,6 @@ import {
   ArrowLeft,
   Trash2,
   Send,
-  Upload,
   X,
   Image as ImageIcon,
   Loader2,
@@ -44,7 +43,7 @@ import { useAuth } from '@/lib/auth-context';
 import { TASK_TYPES, TASK_STATUSES, TASK_PRIORITIES, getRoleLabel } from '@/lib/constants';
 import { formatDate, formatRelativeTime } from '@/lib/utils';
 import { toast } from 'sonner';
-import type { Task, Comment, TaskImage, ActivityLog, Profile, Version, Project } from '@/lib/types';
+import type { Task, Comment, ActivityLog, Profile, Version, Project } from '@/lib/types';
 
 export default function TaskDetailPage() {
   const params = useParams();
@@ -54,7 +53,6 @@ export default function TaskDetailPage() {
 
   const [task, setTask] = useState<Task | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
-  const [images, setImages] = useState<TaskImage[]>([]);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [members, setMembers] = useState<Profile[]>([]);
   const [versions, setVersions] = useState<Version[]>([]);
@@ -62,20 +60,54 @@ export default function TaskDetailPage() {
 
   const [newComment, setNewComment] = useState('');
   const [commentLoading, setCommentLoading] = useState(false);
+  const [imageUploading, setImageUploading] = useState(false);
   const [commentImage, setCommentImage] = useState<File | null>(null);
   const [commentImagePreview, setCommentImagePreview] = useState<string | null>(null);
-  const [uploadLoading, setUploadLoading] = useState(false);
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [mentionIndex, setMentionIndex] = useState(0);
+  const [mentionOpen, setMentionOpen] = useState(false);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [editTitle, setEditTitle] = useState('');
   const [editDescription, setEditDescription] = useState('');
   const [myRole, setMyRole] = useState<string | null>(null);
   const [activityPage, setActivityPage] = useState(1);
+  const [showAllActivity, setShowAllActivity] = useState(false);
   const ACTIVITY_PAGE_SIZE = 10;
+  const ACTIVITY_PREVIEW_COUNT = 5;
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const dragRef = useRef<HTMLDivElement>(null);
   const commentImageInputRef = useRef<HTMLInputElement>(null);
+  const commentTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  const activityCardRef = useRef<HTMLDivElement>(null);
+  const chatCardRef = useRef<HTMLDivElement>(null);
+  const [chatHeight, setChatHeight] = useState(420);
+
+  // Chat card bottom = activity card bottom; chat height = activity bottom - chat top
+  useEffect(() => {
+    const activityEl = activityCardRef.current;
+    const chatEl = chatCardRef.current;
+    if (!activityEl || !chatEl) return;
+    const sync = () => {
+      const activityBottom = activityEl.getBoundingClientRect().bottom;
+      const chatTop = chatEl.getBoundingClientRect().top;
+      const h = Math.max(200, Math.round(activityBottom - chatTop));
+      setChatHeight(h);
+    };
+    sync();
+    const observer = new ResizeObserver(sync);
+    observer.observe(activityEl);
+    observer.observe(chatEl);
+    window.addEventListener('resize', sync);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', sync);
+    };
+  }, [loading]);
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [comments.length]);
 
   const fetchTask = useCallback(async () => {
     if (!user) return;
@@ -96,13 +128,12 @@ export default function TaskDetailPage() {
     setEditTitle(task.title);
     setEditDescription(task.description ?? '');
 
-    const [commentsRes, imagesRes, activityRes, membersRes, versionsRes] = await Promise.all([
+    const [commentsRes, activityRes, membersRes, versionsRes] = await Promise.all([
       supabase
         .from('comments')
         .select('*, profile:profiles(*)')
         .eq('task_id', taskId)
-        .order('created_at', { ascending: false }),
-      supabase.from('task_images').select('*').eq('task_id', taskId).order('created_at', { ascending: false }),
+        .order('created_at', { ascending: true }),
       supabase
         .from('activity_logs')
         .select('*, profile:profiles(*)')
@@ -116,7 +147,6 @@ export default function TaskDetailPage() {
     ]);
 
     setComments((commentsRes.data as unknown as Comment[]) ?? []);
-    setImages((imagesRes.data as TaskImage[]) ?? []);
     setActivityLogs((activityRes.data as unknown as ActivityLog[]) ?? []);
     setMembers((membersRes.data?.map((m) => m.profile) as unknown as Profile[]) ?? []);
     setVersions((versionsRes.data as Version[]) ?? []);
@@ -137,101 +167,109 @@ export default function TaskDetailPage() {
     fetchTask();
   }, [fetchTask]);
 
-  // Paste screenshot handler
-  useEffect(() => {
-    const handlePaste = async (e: ClipboardEvent) => {
-      if (!task) return;
-      const items = e.clipboardData?.items;
-      if (!items) return;
-      for (const item of Array.from(items)) {
-        if (item.type.startsWith('image/')) {
-          const file = item.getAsFile();
-          if (file) {
-            e.preventDefault();
-            await uploadFile(file);
-          }
-        }
-      }
-    };
-    document.addEventListener('paste', handlePaste);
-    return () => document.removeEventListener('paste', handlePaste);
-  }, [task]);
-
-  const uploadFile = async (file: File) => {
-    if (!user || !task) return;
-    setUploadLoading(true);
-    try {
-      const ext = file.name.split('.').pop() ?? 'png';
-      const fileName = `${task.project_id}/${taskId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-      const { error: uploadError } = await supabase.storage
-        .from('task-screenshots')
-        .upload(fileName, file);
-
-      if (uploadError) throw uploadError;
-
-      const { error: dbError } = await supabase.from('task_images').insert({
-        task_id: taskId,
-        storage_path: fileName,
-        file_name: file.name,
-        uploaded_by: user.id,
-      });
-
-      if (dbError) throw dbError;
-
-      const { error: logErr } = await supabase.from('activity_logs').insert({
-        project_id: task.project_id,
-        task_id: taskId,
-        user_id: user.id,
-        action: 'uploaded screenshot',
-        entity_type: 'task_image',
-      });
-      if (logErr) throw logErr;
-
-      await fetchTask();
-      toast.success('Image uploaded');
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Upload failed');
-    } finally {
-      setUploadLoading(false);
-    }
-  };
-
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files) return;
-    for (const file of Array.from(files)) {
-      await uploadFile(file);
-    }
-    if (fileInputRef.current) fileInputRef.current.value = '';
-  };
-
-  const handleDrop = async (e: React.DragEvent) => {
-    e.preventDefault();
-    const files = e.dataTransfer.files;
-    for (const file of Array.from(files)) {
-      if (file.type.startsWith('image/')) {
-        await uploadFile(file);
-      }
-    }
-  };
-
-  const deleteImage = async (image: TaskImage) => {
-    const isAdmin = profile?.role === 'super_admin' || myRole === 'project_admin';
-    if (!isAdmin && image.uploaded_by !== user?.id) {
-      toast.error('Only the uploader or an admin can delete this image');
-      return;
-    }
-    const { error: storageErr } = await supabase.storage.from('task-screenshots').remove([image.storage_path]);
-    if (storageErr) { toast.error(storageErr.message); return; }
-    const { error: dbErr } = await supabase.from('task_images').delete().eq('id', image.id);
-    if (dbErr) { toast.error(dbErr.message); return; }
-    await fetchTask();
-    toast.success('Image deleted');
-  };
-
   const getImageUrl = (path: string) => {
     const { data } = supabase.storage.from('task-screenshots').getPublicUrl(path);
     return data.publicUrl;
+  };
+
+  // --- @mention support ---
+  const mentionCandidates = members.filter((m) => {
+    const q = (mentionQuery ?? '').toLowerCase();
+    return (
+      (m.full_name ?? '').toLowerCase().includes(q) ||
+      m.email.toLowerCase().includes(q)
+    );
+  });
+
+  const handleCommentChange = (value: string) => {
+    setNewComment(value);
+    const caret = commentTextareaRef.current?.selectionStart ?? value.length;
+    const before = value.slice(0, caret);
+    const atIdx = before.lastIndexOf('@');
+    if (atIdx !== -1 && atIdx === before.length - 1) {
+      setMentionQuery('');
+      setMentionIndex(0);
+      setMentionOpen(true);
+    } else if (atIdx !== -1 && /^[a-zA-Z0-9._-]*$/.test(before.slice(atIdx + 1))) {
+      setMentionQuery(before.slice(atIdx + 1));
+      setMentionIndex(0);
+      setMentionOpen(true);
+    } else {
+      setMentionOpen(false);
+    }
+  };
+
+  const insertMention = (m: Profile) => {
+    if (!commentTextareaRef.current) return;
+    const caret = commentTextareaRef.current.selectionStart ?? newComment.length;
+    const before = newComment.slice(0, caret);
+    const atIdx = before.lastIndexOf('@');
+    const after = newComment.slice(caret);
+    const name = m.full_name ?? m.email;
+    const next = `${before.slice(0, atIdx)}@${name} ${after}`;
+    setNewComment(next);
+    setMentionOpen(false);
+    requestAnimationFrame(() => {
+      const el = commentTextareaRef.current;
+      if (el) {
+        const pos = atIdx + name.length + 2;
+        el.focus();
+        el.setSelectionRange(pos, pos);
+      }
+    });
+  };
+
+  const handleMentionKeyDown = (e: React.KeyboardEvent) => {
+    if (mentionOpen) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setMentionIndex((i) => Math.min(i + 1, mentionCandidates.length - 1));
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setMentionIndex((i) => Math.max(i - 1, 0));
+      } else if (e.key === 'Enter' || e.key === 'Tab') {
+        if (mentionCandidates[mentionIndex]) {
+          e.preventDefault();
+          insertMention(mentionCandidates[mentionIndex]);
+        }
+      } else if (e.key === 'Escape') {
+        setMentionOpen(false);
+      }
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      e.preventDefault();
+      addComment();
+    }
+  };
+
+  const renderMessage = (text: string) => {
+    const sorted = [...members].sort(
+      (a, b) => (b.full_name ?? b.email).length - (a.full_name ?? a.email).length
+    );
+    const pattern = sorted
+      .map((m) => `@${(m.full_name ?? m.email).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`)
+      .join('|');
+    if (!pattern) return text;
+    const parts = text.split(new RegExp(`(${pattern})`));
+    return parts.map((part, i) => {
+      const m = sorted.find((x) => `@${x.full_name ?? x.email}` === part);
+      if (m) {
+        const name = m.full_name ?? m.email;
+        const isMe = m.id === user?.id;
+        return (
+          <span
+            key={i}
+            className={`font-semibold px-1.5 py-0.5 rounded-md text-white text-[13px] ${
+              isMe ? 'bg-green-600' : 'bg-[#800000]'
+            }`}
+          >
+            {isMe ? 'You' : name}
+          </span>
+        );
+      }
+      return <span key={i}>{part}</span>;
+    });
   };
 
   const addComment = async () => {
@@ -240,11 +278,13 @@ export default function TaskDetailPage() {
 
     let imagePath: string | null = null;
     if (commentImage) {
+      setImageUploading(true);
       const ext = commentImage.name.split('.').pop() ?? 'png';
       const fileName = `${task.project_id}/${taskId}/comments/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
       const { error: uploadError } = await supabase.storage
         .from('task-screenshots')
         .upload(fileName, commentImage);
+      setImageUploading(false);
       if (uploadError) {
         toast.error(uploadError.message);
         setCommentLoading(false);
@@ -383,6 +423,7 @@ export default function TaskDetailPage() {
   useEffect(() => {
     if (activityPage > activityTotalPages) setActivityPage(1);
   }, [activityPage, activityTotalPages]);
+  const visibleActivity = showAllActivity ? activityPageItems : activityLogs.slice(0, ACTIVITY_PREVIEW_COUNT);
 
   if (loading) {
     return (
@@ -473,159 +514,26 @@ export default function TaskDetailPage() {
             </CardContent>
           </Card>
 
-          {/* Images */}
-          <Card className="card-hover animate-fade-in-up stagger-2">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="text-base flex items-center gap-2">
-                <ImageIcon className="h-4 w-4" />
-                Screenshots
-              </CardTitle>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploadLoading}
-              >
-                {uploadLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
-                Upload
-              </Button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                multiple
-                className="hidden"
-                onChange={handleFileSelect}
-              />
-            </CardHeader>
-            <CardContent>
-              {/* Drop zone */}
-              <div
-                ref={dragRef}
-                onDragOver={(e) => { e.preventDefault(); dragRef.current?.classList.add('border-primary'); }}
-                onDragLeave={() => dragRef.current?.classList.remove('border-primary')}
-                onDrop={handleDrop}
-                className="border-2 border-dashed border-border rounded-lg p-4 text-center text-xs text-muted-foreground mb-4 transition-colors"
-              >
-                Drag & drop images here, or paste (Ctrl+V)
-              </div>
-
-              {images.length === 0 ? (
-                <EmptyState icon={ImageIcon} title="No screenshots" description="Upload images to attach to this task" />
-              ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {images.map((img) => {
-                    const isAdmin = profile?.role === 'super_admin' || myRole === 'project_admin';
-                    const canDeleteImg = isAdmin || img.uploaded_by === user?.id;
-                    return (
-                      <div key={img.id} className="relative group rounded-lg overflow-hidden border border-border shadow-soft">
-                        <img
-                          src={getImageUrl(img.storage_path)}
-                          alt={img.file_name ?? 'screenshot'}
-                          className="w-full h-32 object-cover cursor-pointer"
-                          onClick={() => setPreviewImage(getImageUrl(img.storage_path))}
-                        />
-                        {canDeleteImg && (
-                          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
-                            <Button
-                              variant="destructive"
-                              size="icon"
-                              className="h-8 w-8"
-                              onClick={(e) => { e.stopPropagation(); deleteImage(img); }}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        )}
-                        {img.file_name && (
-                          <p className="text-xs text-muted-foreground truncate px-2 py-1">{img.file_name}</p>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
           {/* Comments */}
-          <Card className="card-hover animate-fade-in-up stagger-3">
-            <CardHeader>
+          <Card
+            ref={chatCardRef}
+            className="card-hover animate-fade-in-up stagger-2 flex flex-col"
+            style={{ height: chatHeight }}
+          >
+            <CardHeader className="shrink-0">
               <CardTitle className="text-base flex items-center gap-2">
                 <MessageSquare className="h-4 w-4" />
                 Comments ({comments.length})
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              {/* New comment */}
-              <div className="flex gap-3">
-                <UserAvatar profile={profile} className="h-8 w-8 shrink-0" />
-                <div className="flex-1 space-y-2">
-                  {commentImagePreview && (
-                    <div className="relative inline-block">
-                      <img
-                        src={commentImagePreview}
-                        alt="Attached"
-                        className="h-24 w-24 object-cover rounded-lg border border-border"
-                      />
-                      <Button
-                        variant="destructive"
-                        size="icon"
-                        className="absolute -top-2 -right-2 h-6 w-6"
-                        onClick={() => { setCommentImage(null); setCommentImagePreview(null); }}
-                      >
-                        <X className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  )}
-                  <Textarea
-                    placeholder="Write a comment... (attach an image with the camera icon)"
-                    value={newComment}
-                    onChange={(e) => setNewComment(e.target.value)}
-                    rows={3}
-                  />
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <input
-                        ref={commentImageInputRef}
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={(e) => {
-                          const f = e.target.files?.[0];
-                          if (f) {
-                            setCommentImage(f);
-                            setCommentImagePreview(URL.createObjectURL(f));
-                          }
-                          if (commentImageInputRef.current) commentImageInputRef.current.value = '';
-                        }}
-                      />
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => commentImageInputRef.current?.click()}
-                      >
-                        <ImageIcon className="h-4 w-4 mr-2" />
-                        Image
-                      </Button>
-                    </div>
-                    <Button
-                      size="sm"
-                      onClick={addComment}
-                      disabled={(!newComment.trim() && !commentImage) || commentLoading}
-                    >
-                      {commentLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}
-                      Send
-                    </Button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Comment list — chat style */}
+            <CardContent className="p-0 flex-1 flex flex-col overflow-hidden">
+              {/* Comment list — chat style (top) */}
               {comments.length === 0 ? (
-                <EmptyState icon={MessageSquare} title="No comments yet" description="Start the conversation" />
+                <div className="py-10 flex-1">
+                  <EmptyState icon={MessageSquare} title="No comments yet" description="Start the conversation" />
+                </div>
               ) : (
-                <div className="space-y-3 pt-2 max-h-[500px] overflow-y-auto pr-1">
+                <div className="flex-1 overflow-y-auto px-4 pt-3 space-y-3 min-h-0">
                   {comments.map((comment) => {
                     const isMine = comment.user_id === user?.id;
                     return (
@@ -648,7 +556,7 @@ export default function TaskDetailPage() {
                               />
                             )}
                             {comment.message.trim() !== '' && comment.message.trim() !== ' ' && (
-                              <p>{comment.message}</p>
+                              <p>{renderMessage(comment.message)}</p>
                             )}
                           </div>
                           <div className={`flex items-center gap-2 mt-1 px-1 text-[11px] text-muted-foreground ${isMine ? 'flex-row-reverse' : ''}`}>
@@ -661,8 +569,116 @@ export default function TaskDetailPage() {
                       </div>
                     );
                   })}
+                  <div ref={chatEndRef} />
                 </div>
               )}
+
+              {/* New comment (bottom) */}
+              <div className="flex gap-3 border-t border-border/60 p-4 shrink-0">
+                <UserAvatar profile={profile} className="h-8 w-8 shrink-0" />
+                <div className="flex-1 space-y-2">
+                  {commentImagePreview && (
+                    <div className="relative inline-block">
+                      <img
+                        src={commentImagePreview}
+                        alt="Attached"
+                        className="h-24 w-24 object-cover rounded-lg border border-border"
+                      />
+                      <Button
+                        variant="destructive"
+                        size="icon"
+                        className="absolute -top-2 -right-2 h-6 w-6"
+                        onClick={() => { setCommentImage(null); setCommentImagePreview(null); }}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  )}
+                  <div className="relative">
+                    <Textarea
+                      ref={commentTextareaRef}
+                      placeholder="Write a comment... use @ to mention someone"
+                      value={newComment}
+                      onChange={(e) => handleCommentChange(e.target.value)}
+                      onKeyDown={handleMentionKeyDown}
+                      rows={3}
+                    />
+                    {mentionOpen && mentionCandidates.length > 0 && (
+                      <div className="absolute bottom-full mb-2 w-72 rounded-xl border border-border bg-popover shadow-elevated z-20 overflow-hidden animate-fade-in-scale">
+                        <p className="px-3 py-1.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider border-b border-border/60">
+                          Mention someone
+                        </p>
+                        <div className="max-h-48 overflow-y-auto p-1">
+                          {mentionCandidates.map((m, i) => (
+                            <button
+                              key={m.id}
+                              type="button"
+                              onMouseDown={(e) => { e.preventDefault(); insertMention(m); }}
+                              onMouseEnter={() => setMentionIndex(i)}
+                              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm text-left transition-colors ${
+                                i === mentionIndex ? 'bg-accent text-accent-foreground' : ''
+                              }`}
+                            >
+                              <UserAvatar profile={m} className="h-6 w-6 shrink-0" />
+                              <span className="flex flex-col min-w-0">
+                                <span className="truncate">{m.full_name ?? m.email}</span>
+                                {m.full_name && (
+                                  <span className="text-[11px] text-muted-foreground truncate">{m.email}</span>
+                                )}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <input
+                        ref={commentImageInputRef}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const f = e.target.files?.[0];
+                          if (f) {
+                            setCommentImage(f);
+                            setCommentImagePreview(URL.createObjectURL(f));
+                          }
+                          if (commentImageInputRef.current) commentImageInputRef.current.value = '';
+                        }}
+                      />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => commentImageInputRef.current?.click()}
+                        disabled={imageUploading}
+                      >
+                        {imageUploading ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <ImageIcon className="h-4 w-4 mr-2" />
+                        )}
+                        {imageUploading ? 'Uploading...' : 'Image'}
+                      </Button>
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={addComment}
+                      disabled={(!newComment.trim() && !commentImage) || commentLoading || imageUploading}
+                    >
+                      {commentLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}
+                      Send
+                    </Button>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground/60 text-right">
+                    <kbd className="px-1 py-0.5 rounded border border-border/60 bg-secondary/50 text-[10px] font-mono">Ctrl</kbd>
+                    {' + '}
+                    <kbd className="px-1 py-0.5 rounded border border-border/60 bg-secondary/50 text-[10px] font-mono">Enter</kbd>
+                    {' '}to send
+                  </p>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -809,12 +825,22 @@ export default function TaskDetailPage() {
           </Card>
 
           {/* Activity */}
-          <Card className="card-hover animate-fade-in-up stagger-3">
-            <CardHeader>
+          <Card ref={activityCardRef} className="card-hover animate-fade-in-up stagger-3">
+            <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-sm flex items-center gap-2">
                 <History className="h-4 w-4" />
                 Activity
               </CardTitle>
+              {activityLogs.length > ACTIVITY_PREVIEW_COUNT && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => setShowAllActivity((s) => !s)}
+                >
+                  {showAllActivity ? 'Show less' : `View all (${activityLogs.length})`}
+                </Button>
+              )}
             </CardHeader>
             <CardContent>
               {activityLogs.length === 0 ? (
@@ -822,7 +848,7 @@ export default function TaskDetailPage() {
               ) : (
                 <>
                   <div className="space-y-3">
-                    {activityPageItems.map((log) => (
+                    {visibleActivity.map((log) => (
                       <div key={log.id} className="flex items-start gap-2 text-xs">
                         <UserAvatar profile={log.profile} className="h-5 w-5 shrink-0" />
                         <div className="flex-1 min-w-0">
@@ -837,13 +863,15 @@ export default function TaskDetailPage() {
                       </div>
                     ))}
                   </div>
-                  <PaginationControls
-                    page={activityPage}
-                    pageSize={ACTIVITY_PAGE_SIZE}
-                    total={activityLogs.length}
-                    onPageChange={setActivityPage}
-                    className="pt-3"
-                  />
+                  {showAllActivity && (
+                    <PaginationControls
+                      page={activityPage}
+                      pageSize={ACTIVITY_PAGE_SIZE}
+                      total={activityLogs.length}
+                      onPageChange={setActivityPage}
+                      className="pt-3"
+                    />
+                  )}
                 </>
               )}
             </CardContent>
