@@ -26,8 +26,17 @@ fi
 echo "Applying migrations to $DB_CONTAINER ($DB_USER/$DB_NAME)..."
 
 for f in "$MIGRATIONS_DIR"/*.sql; do
-  echo "  Applying: $(basename "$f")"
-  docker exec -i "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" < "$f"
+  name="$(basename "$f")"
+  # Run quietly; capture output to detect real errors (NOTICE is fine)
+  output="$(docker exec -i "$DB_CONTAINER" psql -q -U "$DB_USER" -d "$DB_NAME" < "$f" 2>&1)"
+  code=$?
+  errors="$(echo "$output" | grep -E '^ERROR' || true)"
+  if [ $code -ne 0 ] || [ -n "$errors" ]; then
+    echo "  ✗ $name — FAILED"
+    echo "$errors"
+    exit 1
+  fi
+  echo "  ✓ $name — applied"
 done
 
 echo "All migrations applied."
