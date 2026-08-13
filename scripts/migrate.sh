@@ -1,12 +1,13 @@
 #!/bin/bash
 # Apply all migrations to a self-hosted Supabase database.
 # Usage: ./scripts/migrate.sh [db-container] [db-user] [db-name]
-# Defaults: supabase-db / postgres / postgres
+# Defaults: supabase-db / supabase_admin / postgres
+# (supabase_admin is the superuser on self-hosted Supabase — needed for storage policies)
 
 set -e
 
 DB_CONTAINER="${1:-supabase-db}"
-DB_USER="${2:-postgres}"
+DB_USER="${2:-supabase_admin}"
 DB_NAME="${3:-postgres}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

@@ -1,21 +1,22 @@
 /*
-# Project & Issue Management System — initial schema
+# Project & Issue Management System — schema (idempotent)
 
-Fresh migration for the Trackflow project tracker.
+Safe to run multiple times — every statement is guarded with
+IF NOT EXISTS / DROP ... IF EXISTS / ON CONFLICT.
 
 - 12 tables with FKs, CHECK constraints, and indexes
-- triggers: auto-create profile on signup, updated_at maintenance
+- triggers: auto-create profile on signup, updated_at maintenance,
+  slug generation, role-change protection
 - basic security: RLS enabled with a single permissive policy per table
-  (authenticated users only — anon key has no access), plus a trigger
-  preventing users from changing their own role
-- storage bucket for task screenshots
+  (authenticated users only — anon key has no access)
+- storage buckets: task-screenshots, avatars
 */
 
 -- ============================================================
 -- Tables
 -- ============================================================
 
-CREATE TABLE roles (
+CREATE TABLE IF NOT EXISTS roles (
   id text PRIMARY KEY,
   name text NOT NULL,
   description text
@@ -26,9 +27,10 @@ INSERT INTO roles (id, name, description) VALUES
   ('project_admin', 'Project Admin', 'Manages assigned projects'),
   ('developer', 'Developer', 'Works on assigned tasks'),
   ('tester', 'Tester', 'Creates bugs, issues, stories'),
-  ('viewer', 'Viewer', 'Read-only access');
+  ('viewer', 'Viewer', 'Read-only access')
+ON CONFLICT (id) DO NOTHING;
 
-CREATE TABLE profiles (
+CREATE TABLE IF NOT EXISTS profiles (
   id uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   email text NOT NULL,
   full_name text,
@@ -39,7 +41,7 @@ CREATE TABLE profiles (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE TABLE projects (
+CREATE TABLE IF NOT EXISTS projects (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   name text NOT NULL UNIQUE,
   slug text NOT NULL UNIQUE,
@@ -51,7 +53,7 @@ CREATE TABLE projects (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE TABLE project_members (
+CREATE TABLE IF NOT EXISTS project_members (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id uuid NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   user_id uuid NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
@@ -60,7 +62,7 @@ CREATE TABLE project_members (
   UNIQUE (project_id, user_id)
 );
 
-CREATE TABLE versions (
+CREATE TABLE IF NOT EXISTS versions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id uuid NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   name text NOT NULL,
@@ -74,7 +76,7 @@ CREATE TABLE versions (
   UNIQUE (project_id, slug)
 );
 
-CREATE TABLE tags (
+CREATE TABLE IF NOT EXISTS tags (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id uuid NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
   name text NOT NULL,
@@ -82,7 +84,7 @@ CREATE TABLE tags (
   UNIQUE (project_id, name)
 );
 
-CREATE TABLE tasks (
+CREATE TABLE IF NOT EXISTS tasks (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   number int NOT NULL,
   project_id uuid NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -99,13 +101,13 @@ CREATE TABLE tasks (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE TABLE task_tags (
+CREATE TABLE IF NOT EXISTS task_tags (
   task_id uuid NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
   tag_id uuid NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
   PRIMARY KEY (task_id, tag_id)
 );
 
-CREATE TABLE task_images (
+CREATE TABLE IF NOT EXISTS task_images (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   task_id uuid NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
   storage_path text NOT NULL,
@@ -114,7 +116,7 @@ CREATE TABLE task_images (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE TABLE comments (
+CREATE TABLE IF NOT EXISTS comments (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   task_id uuid NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
   user_id uuid NOT NULL DEFAULT auth.uid() REFERENCES profiles(id) ON DELETE CASCADE,
@@ -124,7 +126,7 @@ CREATE TABLE comments (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE TABLE notifications (
+CREATE TABLE IF NOT EXISTS notifications (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   actor_id uuid REFERENCES profiles(id) ON DELETE SET NULL,
@@ -137,7 +139,7 @@ CREATE TABLE notifications (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE TABLE activity_logs (
+CREATE TABLE IF NOT EXISTS activity_logs (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   project_id uuid REFERENCES projects(id) ON DELETE CASCADE,
   task_id uuid REFERENCES tasks(id) ON DELETE CASCADE,
@@ -154,36 +156,47 @@ CREATE TABLE activity_logs (
 -- ============================================================
 
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "profiles_all_authenticated" ON profiles;
 CREATE POLICY "profiles_all_authenticated" ON profiles FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "projects_all_authenticated" ON projects;
 CREATE POLICY "projects_all_authenticated" ON projects FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 ALTER TABLE project_members ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "project_members_all_authenticated" ON project_members;
 CREATE POLICY "project_members_all_authenticated" ON project_members FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 ALTER TABLE versions ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "versions_all_authenticated" ON versions;
 CREATE POLICY "versions_all_authenticated" ON versions FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 ALTER TABLE tags ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "tags_all_authenticated" ON tags;
 CREATE POLICY "tags_all_authenticated" ON tags FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 ALTER TABLE tasks ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "tasks_all_authenticated" ON tasks;
 CREATE POLICY "tasks_all_authenticated" ON tasks FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 ALTER TABLE task_tags ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "task_tags_all_authenticated" ON task_tags;
 CREATE POLICY "task_tags_all_authenticated" ON task_tags FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 ALTER TABLE task_images ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "task_images_all_authenticated" ON task_images;
 CREATE POLICY "task_images_all_authenticated" ON task_images FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 ALTER TABLE comments ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "comments_all_authenticated" ON comments;
 CREATE POLICY "comments_all_authenticated" ON comments FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "notifications_all_authenticated" ON notifications;
 CREATE POLICY "notifications_all_authenticated" ON notifications FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 ALTER TABLE activity_logs ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "activity_logs_all_authenticated" ON activity_logs;
 CREATE POLICY "activity_logs_all_authenticated" ON activity_logs FOR ALL TO authenticated USING (true) WITH CHECK (true);
 
 -- ============================================================
@@ -200,6 +213,7 @@ BEGIN
 END;
 $$;
 
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 CREATE TRIGGER on_auth_user_created AFTER INSERT ON auth.users
   FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
@@ -218,6 +232,7 @@ BEGIN
 END;
 $$;
 
+DROP TRIGGER IF EXISTS prevent_self_role_change ON profiles;
 CREATE TRIGGER prevent_self_role_change BEFORE UPDATE ON profiles
   FOR EACH ROW EXECUTE FUNCTION public.prevent_self_role_change();
 
@@ -225,10 +240,15 @@ CREATE OR REPLACE FUNCTION set_updated_at() RETURNS trigger LANGUAGE plpgsql AS 
 BEGIN NEW.updated_at = now(); RETURN NEW; END;
 $$;
 
+DROP TRIGGER IF EXISTS set_updated_at_profiles ON profiles;
 CREATE TRIGGER set_updated_at_profiles BEFORE UPDATE ON profiles FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+DROP TRIGGER IF EXISTS set_updated_at_projects ON projects;
 CREATE TRIGGER set_updated_at_projects BEFORE UPDATE ON projects FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+DROP TRIGGER IF EXISTS set_updated_at_versions ON versions;
 CREATE TRIGGER set_updated_at_versions BEFORE UPDATE ON versions FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+DROP TRIGGER IF EXISTS set_updated_at_tasks ON tasks;
 CREATE TRIGGER set_updated_at_tasks BEFORE UPDATE ON tasks FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+DROP TRIGGER IF EXISTS set_updated_at_comments ON comments;
 CREATE TRIGGER set_updated_at_comments BEFORE UPDATE ON comments FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 CREATE OR REPLACE FUNCTION public.slugify(text)
@@ -244,8 +264,10 @@ BEGIN
 END;
 $$;
 
+DROP TRIGGER IF EXISTS set_slug_projects ON projects;
 CREATE TRIGGER set_slug_projects BEFORE INSERT OR UPDATE ON projects
   FOR EACH ROW EXECUTE FUNCTION public.set_slug();
+DROP TRIGGER IF EXISTS set_slug_versions ON versions;
 CREATE TRIGGER set_slug_versions BEFORE INSERT OR UPDATE ON versions
   FOR EACH ROW EXECUTE FUNCTION public.set_slug();
 
@@ -253,19 +275,19 @@ CREATE TRIGGER set_slug_versions BEFORE INSERT OR UPDATE ON versions
 -- Indexes
 -- ============================================================
 
-CREATE INDEX idx_tasks_project_id ON tasks(project_id);
-CREATE INDEX idx_tasks_version_id ON tasks(version_id);
-CREATE INDEX idx_tasks_assignee_id ON tasks(assignee_id);
-CREATE INDEX idx_tasks_status ON tasks(status);
-CREATE INDEX idx_tasks_type ON tasks(type);
-CREATE INDEX idx_versions_project_id ON versions(project_id);
-CREATE INDEX idx_project_members_project_id ON project_members(project_id);
-CREATE INDEX idx_project_members_user_id ON project_members(user_id);
-CREATE INDEX idx_comments_task_id ON comments(task_id);
-CREATE INDEX idx_task_images_task_id ON task_images(task_id);
-CREATE INDEX idx_notifications_user_id ON notifications(user_id);
-CREATE INDEX idx_activity_logs_project_id ON activity_logs(project_id);
-CREATE INDEX idx_activity_logs_task_id ON activity_logs(task_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_project_id ON tasks(project_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_version_id ON tasks(version_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_assignee_id ON tasks(assignee_id);
+CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+CREATE INDEX IF NOT EXISTS idx_tasks_type ON tasks(type);
+CREATE INDEX IF NOT EXISTS idx_versions_project_id ON versions(project_id);
+CREATE INDEX IF NOT EXISTS idx_project_members_project_id ON project_members(project_id);
+CREATE INDEX IF NOT EXISTS idx_project_members_user_id ON project_members(user_id);
+CREATE INDEX IF NOT EXISTS idx_comments_task_id ON comments(task_id);
+CREATE INDEX IF NOT EXISTS idx_task_images_task_id ON task_images(task_id);
+CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id);
+CREATE INDEX IF NOT EXISTS idx_activity_logs_project_id ON activity_logs(project_id);
+CREATE INDEX IF NOT EXISTS idx_activity_logs_task_id ON activity_logs(task_id);
 
 -- ============================================================
 -- Realtime
@@ -286,20 +308,26 @@ INSERT INTO storage.buckets (id, name, public, avif_autodetection)
 VALUES ('avatars', 'avatars', true, false)
 ON CONFLICT (id) DO NOTHING;
 
+DROP POLICY IF EXISTS "screenshots_read" ON storage.objects;
 CREATE POLICY "screenshots_read" ON storage.objects
   FOR SELECT TO authenticated USING (bucket_id = 'task-screenshots');
 
+DROP POLICY IF EXISTS "screenshots_insert" ON storage.objects;
 CREATE POLICY "screenshots_insert" ON storage.objects
   FOR INSERT TO authenticated WITH CHECK (bucket_id = 'task-screenshots');
 
+DROP POLICY IF EXISTS "screenshots_delete" ON storage.objects;
 CREATE POLICY "screenshots_delete" ON storage.objects
   FOR DELETE TO authenticated USING (bucket_id = 'task-screenshots');
 
+DROP POLICY IF EXISTS "avatars_read" ON storage.objects;
 CREATE POLICY "avatars_read" ON storage.objects
   FOR SELECT TO authenticated USING (bucket_id = 'avatars');
 
+DROP POLICY IF EXISTS "avatars_insert" ON storage.objects;
 CREATE POLICY "avatars_insert" ON storage.objects
   FOR INSERT TO authenticated WITH CHECK (bucket_id = 'avatars');
 
+DROP POLICY IF EXISTS "avatars_delete" ON storage.objects;
 CREATE POLICY "avatars_delete" ON storage.objects
   FOR DELETE TO authenticated USING (bucket_id = 'avatars');
