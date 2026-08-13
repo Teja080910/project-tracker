@@ -167,6 +167,35 @@ export default function TaskDetailPage() {
     fetchTask();
   }, [fetchTask]);
 
+  // Realtime subscription for live comments
+  useEffect(() => {
+    if (!user || !taskId) return;
+    const channel = supabase
+      .channel(`comments:${taskId}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'comments', filter: `task_id=eq.${taskId}` },
+        async (payload) => {
+          const newComment = payload.new as Comment;
+          // Avoid duplicates: skip if this is the comment we just inserted
+          const { data: profileData } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', newComment.user_id)
+            .maybeSingle();
+          setComments((prev) => {
+            if (prev.some((c) => c.id === newComment.id)) return prev;
+            return [...prev, { ...newComment, profile: (profileData as Profile) ?? undefined }];
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user, taskId]);
+
   const getImageUrl = (path: string) => {
     const { data } = supabase.storage.from('task-screenshots').getPublicUrl(path);
     return data.publicUrl;

@@ -261,6 +261,12 @@ CREATE INDEX idx_activity_logs_project_id ON activity_logs(project_id);
 CREATE INDEX idx_activity_logs_task_id ON activity_logs(task_id);
 
 -- ============================================================
+-- Realtime
+-- ============================================================
+
+ALTER PUBLICATION supabase_realtime ADD TABLE public.comments;
+
+-- ============================================================
 -- Storage
 -- ============================================================
 
