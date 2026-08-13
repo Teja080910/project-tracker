@@ -100,6 +100,8 @@ export default function NewTaskPage() {
               if (v) setVersionId(v.id);
             });
         }
+        // Auto-open the task form when arriving with project/version context
+        setShowForm(true);
       }
     }
   }, [projects, presetProject, presetVersion]);
@@ -125,18 +127,21 @@ export default function NewTaskPage() {
           }
           setMembers(memberProfiles);
         });
-      supabase
+      let query = supabase
         .from('tasks')
         .select('*, project:projects(*), version:versions(*), assignee:profiles!assignee_id(*), reporter:profiles!reporter_id(*)')
         .eq('project_id', projectId)
-        .order('created_at', { ascending: false })
-        .then(({ data }) => setTasks((data as unknown as Task[]) ?? []));
+        .order('created_at', { ascending: false });
+      if (versionId !== 'none') {
+        query = query.eq('version_id', versionId);
+      }
+      query.then(({ data }) => setTasks((data as unknown as Task[]) ?? []));
     } else {
       setVersions([]);
       setMembers([]);
       setTasks([]);
     }
-  }, [projectId]);
+  }, [projectId, versionId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -232,45 +237,74 @@ export default function NewTaskPage() {
         <h1 className="text-2xl font-semibold tracking-tight">New Task</h1>
       </div>
 
-      {/* Project / Version selection */}
-      <Card className="card-hover animate-fade-in-up stagger-1">
-        <CardHeader>
-          <CardTitle className="text-base">Select Project</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="project">Project *</Label>
-              <Select value={projectId} onValueChange={(v) => { setProjectId(v); setShowForm(false); }}>
-                <SelectTrigger id="project">
-                  <SelectValue placeholder="Select project..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {projects.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+      {/* Project / Version context — hidden when preset in URL (arrived from project/version) */}
+      {presetProject && projectId ? (
+        <div className="flex flex-wrap items-center gap-2 animate-fade-in-up stagger-1">
+          <span className="text-xs text-muted-foreground uppercase tracking-wider font-semibold">Adding task to</span>
+          {(() => {
+            const proj = projects.find((p) => p.id === projectId);
+            const ver = versions.find((v) => v.id === versionId);
+            return (
+              <>
+                <Link
+                  href={`/app/projects/${proj?.slug ?? ''}`}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-medium hover:bg-primary/20 transition-colors"
+                >
+                  <FolderKanban className="h-3.5 w-3.5" />
+                  {proj?.name ?? 'Project'}
+                </Link>
+                {ver && (
+                  <>
+                    <span className="text-muted-foreground">/</span>
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-secondary text-foreground text-sm font-medium">
+                      {ver.name}
+                    </span>
+                  </>
+                )}
+              </>
+            );
+          })()}
+        </div>
+      ) : (
+        <Card className="card-hover animate-fade-in-up stagger-1">
+          <CardHeader>
+            <CardTitle className="text-base">Select Project</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="project">Project *</Label>
+                <Select value={projectId} onValueChange={(v) => { setProjectId(v); setShowForm(false); }}>
+                  <SelectTrigger id="project">
+                    <SelectValue placeholder="Select project..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {projects.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="version">Version</Label>
+                <Select value={versionId} onValueChange={setVersionId} disabled={!projectId}>
+                  <SelectTrigger id="version">
+                    <SelectValue placeholder="No version" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No version</SelectItem>
+                    {versions.map((v) => (
+                      <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="version">Version</Label>
-              <Select value={versionId} onValueChange={setVersionId} disabled={!projectId}>
-                <SelectTrigger id="version">
-                  <SelectValue placeholder="No version" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">No version</SelectItem>
-                  {versions.map((v) => (
-                    <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
-      {/* Task list for selected project */}
+      {/* Task list for selected project/version */}
       {projectId && (
         <Card className="animate-fade-in-up stagger-1">
           <CardHeader className="flex flex-row items-center justify-between pb-3">
@@ -278,7 +312,9 @@ export default function NewTaskPage() {
               <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/10 text-primary">
                 <FolderKanban className="h-3.5 w-3.5" />
               </div>
-              Tasks ({tasks.length})
+              {versionId !== 'none'
+                ? `Tasks in ${versions.find((v) => v.id === versionId)?.name ?? 'version'} (${tasks.length})`
+                : `All Tasks (${tasks.length})`}
             </CardTitle>
             <Button size="sm" onClick={() => setShowForm((s) => !s)}>
               <Plus className="h-4 w-4 mr-2" />
