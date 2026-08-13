@@ -17,6 +17,7 @@ import {
 } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuth } from '@/lib/auth-context';
+import { sendNotificationEmail } from '@/lib/email-client';
 import { TASK_TYPES, TASK_PRIORITIES } from '@/lib/constants';
 import { StatusBadge, TypeBadge } from '@/components/shared/badges';
 import { UserAvatar } from '@/components/shared/user-avatar';
@@ -99,7 +100,15 @@ export default function NewTaskPage() {
         .from('project_members')
         .select('profile:profiles(*)')
         .eq('project_id', projectId)
-        .then(({ data }) => setMembers((data?.map((m) => m.profile) as unknown as Profile[]) ?? []));
+        .then(async ({ data }) => {
+          const memberProfiles = (data?.map((m) => m.profile) as unknown as Profile[]) ?? [];
+          const { data: projectData } = await supabase.from('projects').select('owner_id').eq('id', projectId).maybeSingle();
+          if (projectData?.owner_id && !memberProfiles.some((p) => p.id === projectData.owner_id)) {
+            const { data: owner } = await supabase.from('profiles').select('*').eq('id', projectData.owner_id).maybeSingle();
+            if (owner) memberProfiles.push(owner as Profile);
+          }
+          setMembers(memberProfiles);
+        });
       supabase
         .from('tasks')
         .select('*, project:projects(*), version:versions(*), assignee:profiles!assignee_id(*), reporter:profiles!reporter_id(*)')
@@ -169,12 +178,23 @@ export default function NewTaskPage() {
       if (assigneeId !== 'none' && assigneeId !== user.id) {
         const { error: notifErr } = await supabase.from('notifications').insert({
           user_id: assigneeId,
+          actor_id: user.id,
+          project_id: projectId,
           type: 'task_assigned',
           title: `New ${type} assigned: #${data.number}`,
           body: title,
           link: `/app/tasks/${data.id}`,
         });
         if (notifErr) throw notifErr;
+        const assignee = members.find((m) => m.id === assigneeId);
+        if (assignee) {
+          sendNotificationEmail(
+            assignee.email,
+            `New ${type} assigned: #${data.number}`,
+            title,
+            `${window.location.origin}/app/tasks/${data.id}`
+          );
+        }
       }
 
       toast.success('Task created');

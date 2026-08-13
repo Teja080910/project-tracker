@@ -18,23 +18,53 @@ A project management application built with Next.js, TypeScript, and Supabase.
 - Node.js 18+
 - Supabase CLI (for running migrations locally)
 
-### 1. Install dependencies
+### 1. One-Command Setup (recommended)
 
 ```bash
-npm install
+npm run setup
 ```
+
+This installs dependencies, resets the database with migrations, seeds demo data, and starts the dev server.
 
 ### 2. Environment Variables
 
-Copy these into `.env`:
+Copy `.env.sample` to `.env` and fill in the values:
 
 ```
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+SMTP_USER=your-gmail@gmail.com
+SMTP_PASS=your-gmail-app-password
 ```
 
-Get these from Supabase Dashboard > Project Settings > API.
+Get Supabase keys from Supabase Dashboard > Project Settings > API.
+SMTP uses Gmail (App Password required — Google > Security > 2-Step Verification > App passwords).
+
+### 3. Database Commands
+
+| Command | Description |
+|---|---|
+| `npm run db:start` | Start local Supabase |
+| `npm run db:stop` | Stop local Supabase |
+| `npm run db:reset` | Drop & recreate database (applies migrations) |
+| `npm run db:migrate` | Push migrations to remote |
+| `npm run db:seed` | Seed demo users, 5 projects, versions & tasks |
+| `npm run db:setup` | Reset + seed in one step |
+
+### 4. Demo Users (seeded)
+
+All passwords: `Test@123456`
+
+| Email | Role |
+|---|---|
+| `ast.super-admin@yopmail.com` | super_admin |
+| `ast.project-admin@yopmail.com` | project_admin |
+| `ast.developer@yopmail.com` | developer |
+| `ast.tester@yopmail.com` | tester |
+| `ast.viewer@yopmail.com` | viewer |
+
+Seed data: 5 projects, each with 20-50 versions, each version with 40-100 tasks.
 
 ### 3. Run Database Migrations
 
@@ -48,8 +78,7 @@ supabase migration up
 **Option B — Supabase Dashboard (production):**
 
 1. Go to Supabase Dashboard > SQL Editor
-2. Open and run `supabase/migrations/20260803103443_create_project_management_schema.sql`
-3. Then run `supabase/migrations/20260803104217_add_storage_policies.sql`
+2. Open and run `supabase/migrations/20260812000000_create_project_management_schema.sql`
 
 **Option C — Supabase CLI (remote project):**
 
@@ -60,7 +89,7 @@ supabase db push
 
 ### 4. Create a Storage Bucket
 
-In Supabase Dashboard > Storage, create a public bucket named `task-screenshots`.
+In Supabase Dashboard > Storage, create a public bucket named `task-screenshots` (the migration creates it automatically on local reset).
 
 ### 5. Run the dev server
 

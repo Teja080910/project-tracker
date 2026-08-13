@@ -60,6 +60,17 @@ export default function UsersPage() {
     fetchUsers();
   }, [fetchUsers]);
 
+  const filtered = users.filter(
+    (u) =>
+      (u.full_name?.toLowerCase().includes(search.toLowerCase()) ?? false) ||
+      u.email.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  useEffect(() => {
+    if (page > totalPages) setPage(1);
+  }, [page, totalPages]);
+
   if (!isSuperAdmin) {
     return (
       <div className="text-center py-12">
@@ -72,17 +83,7 @@ export default function UsersPage() {
     );
   }
 
-  const filtered = users.filter(
-    (u) =>
-      (u.full_name?.toLowerCase().includes(search.toLowerCase()) ?? false) ||
-      u.email.toLowerCase().includes(search.toLowerCase())
-  );
-
   const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  useEffect(() => {
-    if (page > totalPages) setPage(1);
-  }, [page, totalPages]);
 
   const updateRole = async (userId: string, role: string) => {
     const { error } = await supabase.from('profiles').update({ role }).eq('id', userId);

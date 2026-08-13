@@ -48,12 +48,12 @@ export function Topbar() {
     if (!profile) return;
     const { data } = await supabase
       .from('notifications')
-      .select('*')
+      .select('*, actor:profiles!actor_id(*), project:projects(*)')
       .eq('user_id', profile.id)
       .order('created_at', { ascending: false })
       .limit(10);
     if (data) {
-      setNotifications(data as Notification[]);
+      setNotifications(data as unknown as Notification[]);
       setUnreadCount(data.filter((n) => !n.read).length);
     }
   }, [profile]);
@@ -61,6 +61,31 @@ export function Topbar() {
   useEffect(() => {
     fetchNotifications();
   }, [fetchNotifications]);
+
+  // Realtime: new notifications appear instantly
+  useEffect(() => {
+    if (!profile) return;
+    const channel = supabase
+      .channel(`topbar-notifications:${profile.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${profile.id}` },
+        async (payload) => {
+          const n = payload.new as Notification;
+          const { data: actor } = await supabase.from('profiles').select('*').eq('id', n.actor_id ?? '').maybeSingle();
+          const { data: project } = await supabase.from('projects').select('*').eq('id', n.project_id ?? '').maybeSingle();
+          setNotifications((prev) => {
+            if (prev.some((x) => x.id === n.id)) return prev;
+            return [{ ...n, actor: (actor as never) ?? null, project: (project as never) ?? null }, ...prev].slice(0, 10);
+          });
+          setUnreadCount((c) => c + 1);
+        }
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [profile]);
 
   useEffect(() => {
     if (!searchQuery.trim() || searchQuery.length < 2) {
@@ -296,6 +321,37 @@ export function Topbar() {
 function MobileNav({ onNavigate }: { onNavigate: () => void }) {
   const { profile } = useAuth();
   const isSuperAdmin = profile?.role === 'super_admin';
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    if (!profile) return;
+    const fetchCount = async () => {
+      const { count } = await supabase
+        .from('notifications')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', profile.id)
+        .eq('read', false);
+      setUnreadCount(count ?? 0);
+    };
+    fetchCount();
+    const channel = supabase
+      .channel(`mobilenav-notifications:${profile.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${profile.id}` },
+        () => setUnreadCount((c) => c + 1)
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'notifications', filter: `user_id=eq.${profile.id}` },
+        () => fetchCount()
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [profile]);
+
   const items = [
     { href: '/app', label: 'Dashboard' },
     { href: '/app/projects', label: 'Projects' },
@@ -311,9 +367,14 @@ function MobileNav({ onNavigate }: { onNavigate: () => void }) {
           key={item.href}
           href={item.href}
           onClick={onNavigate}
-          className="px-2.5 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors duration-150"
+          className="flex items-center justify-between px-2.5 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors duration-150"
         >
-          {item.label}
+          <span>{item.label}</span>
+          {item.href === '/app/notifications' && unreadCount > 0 && (
+            <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-bold text-primary-foreground tabular-nums">
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </span>
+          )}
         </Link>
       ))}
     </nav>

@@ -45,6 +45,7 @@ import { EmptyState } from '@/components/shared/empty-state';
 import { PaginationControls } from '@/components/shared/pagination';
 import { supabase } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth-context';
+import { sendNotificationEmail } from '@/lib/email-client';
 import { getProjectStatusMeta, getRoleLabel, getVersionStatusMeta } from '@/lib/constants';
 import { formatDate, cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -132,6 +133,24 @@ export default function ProjectDetailPage() {
     if (error) {
       toast.error(error.message);
     } else {
+      await supabase.from('notifications').insert({
+        user_id: newMemberId,
+        actor_id: user?.id,
+        project_id: project?.id,
+        type: 'member_added',
+        title: `You were added to ${project?.name}`,
+        body: `Role: ${getRoleLabel(newMemberRole)}`,
+        link: `/app/projects/${projectSlug}`,
+      });
+      const newMember = allProfiles.find((p) => p.id === newMemberId);
+      if (newMember) {
+        sendNotificationEmail(
+          newMember.email,
+          `You were added to ${project?.name}`,
+          `Role: ${getRoleLabel(newMemberRole)}`,
+          `${window.location.origin}/app/projects/${projectSlug}`
+        );
+      }
       setNewMemberId('');
       setAddMemberOpen(false);
       await fetchProject();

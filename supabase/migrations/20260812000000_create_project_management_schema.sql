@@ -127,6 +127,8 @@ CREATE TABLE comments (
 CREATE TABLE notifications (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  actor_id uuid REFERENCES profiles(id) ON DELETE SET NULL,
+  project_id uuid REFERENCES projects(id) ON DELETE CASCADE,
   type text NOT NULL,
   title text NOT NULL,
   body text,
@@ -265,6 +267,7 @@ CREATE INDEX idx_activity_logs_task_id ON activity_logs(task_id);
 -- ============================================================
 
 ALTER PUBLICATION supabase_realtime ADD TABLE public.comments;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.notifications;
 
 -- ============================================================
 -- Storage

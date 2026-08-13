@@ -101,12 +101,16 @@ export interface Comment {
 export interface Notification {
   id: string;
   user_id: string;
+  actor_id: string | null;
+  project_id: string | null;
   type: string;
   title: string;
   body: string | null;
   link: string | null;
   read: boolean;
   created_at: string;
+  actor?: Profile | null;
+  project?: Project | null;
 }
 
 export interface ActivityLog {

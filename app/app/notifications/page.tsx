@@ -2,17 +2,27 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { Bell, CheckCheck, Trash2 } from 'lucide-react';
+import { Bell, CheckCheck, Trash2, FolderKanban, Sparkles, MessageSquare, UserPlus, Tag, AlertCircle } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/shared/empty-state';
 import { PaginationControls } from '@/components/shared/pagination';
+import { UserAvatar } from '@/components/shared/user-avatar';
 import { supabase } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth-context';
 import { formatRelativeTime } from '@/lib/utils';
 import { toast } from 'sonner';
 import type { Notification } from '@/lib/types';
+
+const TYPE_META: Record<string, { icon: typeof Bell; color: string }> = {
+  welcome: { icon: Sparkles, color: 'text-violet-500 bg-violet-500/10' },
+  mention: { icon: MessageSquare, color: 'text-blue-500 bg-blue-500/10' },
+  comment_added: { icon: MessageSquare, color: 'text-blue-500 bg-blue-500/10' },
+  task_assigned: { icon: Tag, color: 'text-amber-500 bg-amber-500/10' },
+  status_changed: { icon: AlertCircle, color: 'text-green-500 bg-green-500/10' },
+  member_added: { icon: UserPlus, color: 'text-emerald-500 bg-emerald-500/10' },
+};
 
 export default function NotificationsPage() {
   const { user } = useAuth();
@@ -25,16 +35,40 @@ export default function NotificationsPage() {
     if (!user) return;
     const { data } = await supabase
       .from('notifications')
-      .select('*')
+      .select('*, actor:profiles!actor_id(*), project:projects(*)')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false });
-    setNotifications((data as Notification[]) ?? []);
+    setNotifications((data as unknown as Notification[]) ?? []);
     setLoading(false);
   }, [user]);
 
   useEffect(() => {
     fetchNotifications();
   }, [fetchNotifications]);
+
+  // Realtime: new notifications appear instantly
+  useEffect(() => {
+    if (!user) return;
+    const channel = supabase
+      .channel(`notifications:${user.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` },
+        async (payload) => {
+          const n = payload.new as Notification;
+          const { data: actor } = await supabase.from('profiles').select('*').eq('id', n.actor_id ?? '').maybeSingle();
+          const { data: project } = await supabase.from('projects').select('*').eq('id', n.project_id ?? '').maybeSingle();
+          setNotifications((prev) => {
+            if (prev.some((x) => x.id === n.id)) return prev;
+            return [{ ...n, actor: (actor as never) ?? null, project: (project as never) ?? null }, ...prev];
+          });
+        }
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
 
   const markAllRead = async () => {
     if (!user) return;
@@ -55,6 +89,11 @@ export default function NotificationsPage() {
     fetchNotifications();
   };
 
+  const totalPages = Math.max(1, Math.ceil(notifications.length / PAGE_SIZE));
+  useEffect(() => {
+    if (page > totalPages) setPage(1);
+  }, [page, totalPages]);
+
   if (loading) {
     return (
       <div className="space-y-6">
@@ -70,10 +109,6 @@ export default function NotificationsPage() {
 
   const unreadCount = notifications.filter((n) => !n.read).length;
   const pageItems = notifications.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const totalPages = Math.max(1, Math.ceil(notifications.length / PAGE_SIZE));
-  useEffect(() => {
-    if (page > totalPages) setPage(1);
-  }, [page, totalPages]);
 
   return (
     <div className="space-y-6">
@@ -100,43 +135,69 @@ export default function NotificationsPage() {
         </Card>
       ) : (
         <div className="space-y-2">
-          {pageItems.map((n, i) => (
-            <div
-              key={n.id}
-              className={`flex items-start gap-3 px-4 py-3 rounded-lg border transition-all duration-200 hover:shadow-soft animate-fade-in-up stagger-${Math.min(i + 1, 7)} ${
-                n.read ? 'border-border bg-transparent hover:bg-secondary/30' : 'border-border bg-secondary/30 hover:bg-secondary/50'
-              }`}
-            >
-              {!n.read && <span className="mt-1.5 h-2 w-2 rounded-full bg-blue-500 shrink-0 animate-pulse-glow" />}
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium">{n.title}</p>
-                {n.body && <p className="text-xs text-muted-foreground mt-0.5">{n.body}</p>}
-                <p className="text-xs text-muted-foreground mt-1">{formatRelativeTime(n.created_at)}</p>
-              </div>
-              <div className="flex items-center gap-1">
-                {n.link && (
-                  <Link href={n.link}>
-                    <Button variant="ghost" size="sm" className="h-8 text-xs">
-                      View
+          {pageItems.map((n, i) => {
+            const meta = TYPE_META[n.type] ?? { icon: Bell, color: 'text-muted-foreground bg-secondary' };
+            const Icon = meta.icon;
+            return (
+              <div
+                key={n.id}
+                className={`flex items-start gap-3 px-4 py-3 rounded-lg border transition-all duration-200 hover:shadow-soft animate-fade-in-up stagger-${Math.min(i + 1, 7)} ${
+                  n.read ? 'border-border bg-transparent hover:bg-secondary/30' : 'border-border bg-secondary/30 hover:bg-secondary/50'
+                }`}
+              >
+                {!n.read && <span className="mt-1.5 h-2 w-2 rounded-full bg-blue-500 shrink-0 animate-pulse-glow" />}
+                <div className={`flex h-9 w-9 items-center justify-center rounded-lg shrink-0 ${meta.color}`}>
+                  <Icon className="h-4 w-4" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium">{n.title}</p>
+                  {n.body && <p className="text-xs text-muted-foreground mt-0.5">{n.body}</p>}
+                  <div className="flex items-center gap-2 mt-1.5 text-[11px] text-muted-foreground">
+                    {n.actor && (
+                      <span className="flex items-center gap-1 min-w-0">
+                        <UserAvatar profile={n.actor} className="h-4 w-4" />
+                        <span className="truncate">{n.actor.full_name ?? n.actor.email}</span>
+                      </span>
+                    )}
+                    {n.project && (
+                      <span className="flex items-center gap-1 min-w-0">
+                        <FolderKanban className="h-3 w-3 shrink-0" />
+                        <span className="truncate">{n.project.name}</span>
+                      </span>
+                    )}
+                    <span>{formatRelativeTime(n.created_at)}</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1">
+                  {n.link && (
+                    <Link
+                      href={n.link}
+                      onClick={() => {
+                        if (!n.read) markRead(n.id);
+                      }}
+                    >
+                      <Button variant="ghost" size="sm" className="h-8 text-xs">
+                        View
+                      </Button>
+                    </Link>
+                  )}
+                  {!n.read && (
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => markRead(n.id)}>
+                      <CheckCheck className="h-3.5 w-3.5" />
                     </Button>
-                  </Link>
-                )}
-                {!n.read && (
-                  <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => markRead(n.id)}>
-                    <CheckCheck className="h-3.5 w-3.5" />
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                    onClick={() => deleteNotification(n.id)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
                   </Button>
-                )}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                  onClick={() => deleteNotification(n.id)}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
       <PaginationControls

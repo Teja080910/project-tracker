@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -16,6 +17,7 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/auth-context';
 import { UserAvatar } from '@/components/shared/user-avatar';
 import { getRoleLabel } from '@/lib/constants';
+import { supabase } from '@/lib/supabase/client';
 import { APP_NAME, APP_LOGO_URL, APP_INITIAL } from '@/lib/app-config';
 
 const navItems = [
@@ -29,6 +31,38 @@ export function Sidebar() {
   const pathname = usePathname();
   const { profile } = useAuth();
   const isSuperAdmin = profile?.role === 'super_admin';
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    if (!profile) return;
+    const fetchCount = async () => {
+      const { count } = await supabase
+        .from('notifications')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', profile.id)
+        .eq('read', false);
+      setUnreadCount(count ?? 0);
+    };
+    fetchCount();
+
+    const channel = supabase
+      .channel(`sidebar-notifications:${profile.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${profile.id}` },
+        () => setUnreadCount((c) => c + 1)
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'notifications', filter: `user_id=eq.${profile.id}` },
+        () => fetchCount()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [profile]);
 
   return (
     <aside className="hidden md:flex flex-col w-60 sidebar-bg shrink-0">
@@ -72,7 +106,12 @@ export function Sidebar() {
                 )}
                 <Icon className={cn('h-4 w-4 shrink-0 transition-all duration-200', isActive ? 'scale-110' : 'group-hover:scale-110')} />
                 <span>{item.label}</span>
-                {isActive && (
+                {item.href === '/app/notifications' && unreadCount > 0 && (
+                  <span className="ml-auto flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[10px] font-bold text-primary-foreground tabular-nums">
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </span>
+                )}
+                {isActive && item.href !== '/app/notifications' && (
                   <ChevronRight className="h-3.5 w-3.5 ml-auto text-primary/60" />
                 )}
               </Link>

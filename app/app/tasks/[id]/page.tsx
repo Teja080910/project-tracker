@@ -40,6 +40,7 @@ import { EmptyState } from '@/components/shared/empty-state';
 import { PaginationControls } from '@/components/shared/pagination';
 import { supabase } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth-context';
+import { sendNotificationEmail } from '@/lib/email-client';
 import { TASK_TYPES, TASK_STATUSES, TASK_PRIORITIES, getRoleLabel } from '@/lib/constants';
 import { formatDate, formatRelativeTime } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -109,6 +110,17 @@ export default function TaskDetailPage() {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [comments.length]);
 
+  // Scroll the comment input into view on page load/refresh
+  useEffect(() => {
+    if (!loading && task) {
+      // small delay so the layout is fully settled after data fetch
+      const t = setTimeout(() => {
+        commentTextareaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 300);
+      return () => clearTimeout(t);
+    }
+  }, [loading, task]);
+
   const fetchTask = useCallback(async () => {
     if (!user) return;
 
@@ -128,7 +140,7 @@ export default function TaskDetailPage() {
     setEditTitle(task.title);
     setEditDescription(task.description ?? '');
 
-    const [commentsRes, activityRes, membersRes, versionsRes] = await Promise.all([
+    const [commentsRes, activityRes, membersRes, versionsRes, ownerRes] = await Promise.all([
       supabase
         .from('comments')
         .select('*, profile:profiles(*)')
@@ -144,11 +156,17 @@ export default function TaskDetailPage() {
         .select('profile:profiles(*)')
         .eq('project_id', task.project_id),
       supabase.from('versions').select('*').eq('project_id', task.project_id).order('created_at', { ascending: false }),
+      supabase.from('profiles').select('*').eq('id', task.project?.owner_id ?? '').maybeSingle(),
     ]);
 
     setComments((commentsRes.data as unknown as Comment[]) ?? []);
     setActivityLogs((activityRes.data as unknown as ActivityLog[]) ?? []);
-    setMembers((membersRes.data?.map((m) => m.profile) as unknown as Profile[]) ?? []);
+    const memberProfiles = (membersRes.data?.map((m) => m.profile) as unknown as Profile[]) ?? [];
+    // Include the project owner (may not be a project_member row)
+    if (ownerRes.data && !memberProfiles.some((p) => p.id === ownerRes.data.id)) {
+      memberProfiles.push(ownerRes.data as Profile);
+    }
+    setMembers(memberProfiles);
     setVersions((versionsRes.data as Version[]) ?? []);
 
     // Check my role
@@ -345,15 +363,54 @@ export default function TaskDetailPage() {
       });
       if (logErr) throw logErr;
 
-      if (task.assignee_id && task.assignee_id !== user.id) {
+      const commentText = newComment.trim();
+      const notifBase = {
+        actor_id: user.id,
+        project_id: task.project_id,
+        link: `/app/tasks/${taskId}`,
+      };
+
+      // Notify mentioned users
+      const mentioned = members.filter((m) => {
+        const name = m.full_name ?? m.email;
+        return m.id !== user.id && commentText.includes(`@${name}`);
+      });
+      for (const m of mentioned) {
         const { error: notifErr } = await supabase.from('notifications').insert({
+          ...notifBase,
+          user_id: m.id,
+          type: 'mention',
+          title: `${profile?.full_name ?? profile?.email} mentioned you in #${task.number}`,
+          body: commentText.slice(0, 100) || 'Sent an image',
+        });
+        if (notifErr) throw notifErr;
+        sendNotificationEmail(
+          m.email,
+          `${profile?.full_name ?? profile?.email} mentioned you in #${task.number}`,
+          commentText.slice(0, 200) || 'Sent an image',
+          `${window.location.origin}${notifBase.link}`
+        );
+      }
+
+      // Notify assignee (if not already mentioned)
+      if (task.assignee_id && task.assignee_id !== user.id && !mentioned.some((m) => m.id === task.assignee_id)) {
+        const { error: notifErr } = await supabase.from('notifications').insert({
+          ...notifBase,
           user_id: task.assignee_id,
           type: 'comment_added',
           title: `New comment on #${task.number}`,
-          body: newComment.trim().slice(0, 100) || 'Sent an image',
-          link: `/app/tasks/${taskId}`,
+          body: commentText.slice(0, 100) || 'Sent an image',
         });
         if (notifErr) throw notifErr;
+        const assignee = members.find((m) => m.id === task.assignee_id);
+        if (assignee) {
+          sendNotificationEmail(
+            assignee.email,
+            `New comment on #${task.number}`,
+            commentText.slice(0, 200) || 'Sent an image',
+            `${window.location.origin}${notifBase.link}`
+          );
+        }
       }
 
       setNewComment('');
@@ -389,12 +446,23 @@ export default function TaskDetailPage() {
         if (task.assignee_id && task.assignee_id !== user.id) {
           const { error: notifErr } = await supabase.from('notifications').insert({
             user_id: task.assignee_id,
+            actor_id: user.id,
+            project_id: task.project_id,
             type: 'status_changed',
             title: `Status changed on #${task.number}`,
             body: `${task.status.replace('_', ' ')} → ${updates.status.replace('_', ' ')}`,
             link: `/app/tasks/${taskId}`,
           });
           if (notifErr) throw notifErr;
+          const assignee = members.find((m) => m.id === task.assignee_id);
+          if (assignee) {
+            sendNotificationEmail(
+              assignee.email,
+              `Status changed on #${task.number}`,
+              `${task.status.replace('_', ' ')} → ${updates.status.replace('_', ' ')}`,
+              `${window.location.origin}/app/tasks/${taskId}`
+            );
+          }
         }
       }
       if (updates.assignee_id !== undefined && updates.assignee_id !== task.assignee_id) {
@@ -402,12 +470,23 @@ export default function TaskDetailPage() {
         if (newAssigneeId && newAssigneeId !== user.id) {
           const { error: notifErr } = await supabase.from('notifications').insert({
             user_id: newAssigneeId,
+            actor_id: user.id,
+            project_id: task.project_id,
             type: 'task_assigned',
             title: `Task assigned: #${task.number}`,
             body: task.title,
             link: `/app/tasks/${taskId}`,
           });
           if (notifErr) throw notifErr;
+          const newAssignee = members.find((m) => m.id === newAssigneeId);
+          if (newAssignee) {
+            sendNotificationEmail(
+              newAssignee.email,
+              `Task assigned: #${task.number}`,
+              task.title,
+              `${window.location.origin}/app/tasks/${taskId}`
+            );
+          }
         }
         const { error: logErr } = await supabase.from('activity_logs').insert({
           project_id: task.project_id,

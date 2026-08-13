@@ -64,6 +64,13 @@ export default function SignupPage() {
       toast.error(error.message);
       setLoading(false);
     } else if (data.session) {
+      await supabase.from('notifications').insert({
+        user_id: data.session.user.id,
+        type: 'welcome',
+        title: 'Welcome to the workspace!',
+        body: 'Create a project or join one to get started.',
+        link: '/app/projects',
+      });
       router.push('/app');
     } else {
       toast.success('Account created! Please check your email to verify.');
