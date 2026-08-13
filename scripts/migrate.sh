@@ -27,8 +27,8 @@ echo "Applying migrations to $DB_CONTAINER ($DB_USER/$DB_NAME)..."
 
 for f in "$MIGRATIONS_DIR"/*.sql; do
   name="$(basename "$f")"
-  # Capture all output; only real ERROR lines are shown (NOTICEs are ignored)
-  output="$(docker exec -i "$DB_CONTAINER" psql -q -U "$DB_USER" -d "$DB_NAME" < "$f" 2>&1)"
+  # stdout -> /dev/null (suppress command tags), stderr captured (NOTICEs/ERRORs)
+  output="$(docker exec -i "$DB_CONTAINER" psql -U "$DB_USER" -d "$DB_NAME" < "$f" 2>&1 >/dev/null)"
   code=$?
   errors="$(echo "$output" | grep -E '^ERROR' || true)"
   if [ $code -ne 0 ] || [ -n "$errors" ]; then
