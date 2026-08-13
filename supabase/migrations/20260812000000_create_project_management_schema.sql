@@ -206,8 +206,13 @@ CREATE TRIGGER on_auth_user_created AFTER INSERT ON auth.users
 CREATE OR REPLACE FUNCTION public.prevent_self_role_change()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 BEGIN
-  IF NEW.role IS DISTINCT FROM OLD.role AND auth.uid() = OLD.id THEN
-    RAISE EXCEPTION 'users cannot change their own role';
+  IF NEW.role IS DISTINCT FROM OLD.role THEN
+    IF auth.uid() = OLD.id THEN
+      RAISE EXCEPTION 'users cannot change their own role';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'super_admin') THEN
+      RAISE EXCEPTION 'only super admins can change roles';
+    END IF;
   END IF;
   RETURN NEW;
 END;
