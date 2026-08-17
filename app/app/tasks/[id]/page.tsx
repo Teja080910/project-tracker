@@ -53,6 +53,7 @@ import { UserAvatar } from '@/components/shared/user-avatar';
 import { StatusBadge, TypeBadge, PriorityBadge } from '@/components/shared/badges';
 import { EmptyState } from '@/components/shared/empty-state';
 import { PaginationControls } from '@/components/shared/pagination';
+import { ConfirmDeleteDialog } from '@/components/shared/confirm-delete-dialog';
 import { DatePicker } from '@/components/shared/date-picker';
 import { supabase } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth-context';
@@ -90,6 +91,8 @@ export default function TaskDetailPage() {
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editingCommentText, setEditingCommentText] = useState('');
   const [commentEditLoading, setCommentEditLoading] = useState(false);
+  const [deleteTaskOpen, setDeleteTaskOpen] = useState(false);
+  const [deleteTaskLoading, setDeleteTaskLoading] = useState(false);
   const [myRole, setMyRole] = useState<string | null>(null);
   const [activityPage, setActivityPage] = useState(1);
   const [showAllActivity, setShowAllActivity] = useState(false);
@@ -564,6 +567,13 @@ export default function TaskDetailPage() {
     }
   };
 
+  const confirmDeleteTask = async () => {
+    setDeleteTaskLoading(true);
+    await deleteTask();
+    setDeleteTaskLoading(false);
+    setDeleteTaskOpen(false);
+  };
+
   const canEdit = myRole === 'project_admin' || profile?.role === 'super_admin' || task?.reporter_id === user?.id;
   const canDelete = myRole === 'project_admin' || profile?.role === 'super_admin';
   const backHref = task?.version
@@ -612,12 +622,23 @@ export default function TaskDetailPage() {
           <span className="text-sm text-muted-foreground">#{task.number}</span>
         </div>
         {canDelete && (
-          <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={deleteTask}>
+          <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => setDeleteTaskOpen(true)}>
             <Trash2 className="h-4 w-4 mr-2" />
             Delete
           </Button>
         )}
       </div>
+
+      {/* Delete task confirmation */}
+      <ConfirmDeleteDialog
+        open={deleteTaskOpen}
+        onOpenChange={setDeleteTaskOpen}
+        title="Delete Task"
+        description={`This will permanently delete task #${task?.number} "${task?.title}" and all its comments and images. This action cannot be undone.`}
+        confirmText={task?.title ?? ''}
+        onConfirm={confirmDeleteTask}
+        loading={deleteTaskLoading}
+      />
 
       <div className="grid lg:grid-cols-3 gap-6">
         {/* Main content */}

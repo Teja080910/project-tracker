@@ -9,6 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/shared/empty-state';
 import { PaginationControls } from '@/components/shared/pagination';
 import { UserAvatar } from '@/components/shared/user-avatar';
+import { ConfirmDeleteDialog } from '@/components/shared/confirm-delete-dialog';
 import { supabase } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth-context';
 import { formatRelativeTime } from '@/lib/utils';
@@ -30,6 +31,8 @@ export default function NotificationsPage() {
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 10;
+  const [deleteTarget, setDeleteTarget] = useState<Notification | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   const fetchNotifications = useCallback(async () => {
     if (!user) return;
@@ -87,6 +90,14 @@ export default function NotificationsPage() {
     if (!user) return;
     await supabase.from('notifications').delete().eq('id', id).eq('user_id', user.id);
     fetchNotifications();
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleteLoading(true);
+    await deleteNotification(deleteTarget.id);
+    setDeleteLoading(false);
+    setDeleteTarget(null);
   };
 
   const totalPages = Math.max(1, Math.ceil(notifications.length / PAGE_SIZE));
@@ -190,7 +201,7 @@ export default function NotificationsPage() {
                     variant="ghost"
                     size="icon"
                     className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                    onClick={() => deleteNotification(n.id)}
+                    onClick={() => setDeleteTarget(n)}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
@@ -205,6 +216,17 @@ export default function NotificationsPage() {
         pageSize={PAGE_SIZE}
         total={notifications.length}
         onPageChange={setPage}
+      />
+
+      {/* Delete notification confirmation */}
+      <ConfirmDeleteDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}
+        title="Delete Notification"
+        description={`Delete "${deleteTarget?.title}"? This cannot be undone.`}
+        confirmText={deleteTarget?.title ?? ''}
+        onConfirm={confirmDelete}
+        loading={deleteLoading}
       />
     </div>
   );

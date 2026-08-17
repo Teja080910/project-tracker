@@ -43,6 +43,7 @@ import {
 import { UserAvatar } from '@/components/shared/user-avatar';
 import { EmptyState } from '@/components/shared/empty-state';
 import { PaginationControls } from '@/components/shared/pagination';
+import { ConfirmDeleteDialog } from '@/components/shared/confirm-delete-dialog';
 import { supabase } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth-context';
 import { sendNotificationEmail } from '@/lib/email-client';
@@ -75,6 +76,10 @@ export default function ProjectDetailPage() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 10;
+  const [deleteProjectOpen, setDeleteProjectOpen] = useState(false);
+  const [deleteProjectLoading, setDeleteProjectLoading] = useState(false);
+  const [removeMemberTarget, setRemoveMemberTarget] = useState<ProjectMember | null>(null);
+  const [removeMemberLoading, setRemoveMemberLoading] = useState(false);
 
   const isSuperAdmin = profile?.role === 'super_admin';
   const [myRole, setMyRole] = useState<string | null>(null);
@@ -168,6 +173,14 @@ export default function ProjectDetailPage() {
     }
   };
 
+  const confirmRemoveMember = async () => {
+    if (!removeMemberTarget) return;
+    setRemoveMemberLoading(true);
+    await removeMember(removeMemberTarget.id);
+    setRemoveMemberLoading(false);
+    setRemoveMemberTarget(null);
+  };
+
   const updateMemberRole = async (memberId: string, role: string) => {
     const { error } = await supabase.from('project_members').update({ role }).eq('id', memberId);
     if (error) {
@@ -186,6 +199,13 @@ export default function ProjectDetailPage() {
       toast.success('Project deleted');
       router.push('/app/projects');
     }
+  };
+
+  const confirmDeleteProject = async () => {
+    setDeleteProjectLoading(true);
+    await deleteProject();
+    setDeleteProjectLoading(false);
+    setDeleteProjectOpen(false);
   };
 
   const saveProject = async () => {
@@ -348,7 +368,7 @@ export default function ProjectDetailPage() {
                 </div>
                 {isSuperAdmin && (
                   <div className="pt-4 border-t">
-                    <Button variant="destructive" size="sm" onClick={deleteProject}>
+                    <Button variant="destructive" size="sm" onClick={() => setDeleteProjectOpen(true)}>
                       <Trash2 className="h-4 w-4 mr-2" />
                       Delete Project
                     </Button>
@@ -634,7 +654,7 @@ export default function ProjectDetailPage() {
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                      onClick={() => removeMember(member.id)}
+                      onClick={() => setRemoveMemberTarget(member)}
                     >
                       <X className="h-4 w-4" />
                     </Button>
@@ -649,6 +669,28 @@ export default function ProjectDetailPage() {
           </div>
         )}
       </div>
+
+      {/* Delete project confirmation */}
+      <ConfirmDeleteDialog
+        open={deleteProjectOpen}
+        onOpenChange={setDeleteProjectOpen}
+        title="Delete Project"
+        description={`This will permanently delete "${project?.name}" and all its versions, tasks, comments and members. This action cannot be undone.`}
+        confirmText={project?.name ?? ''}
+        onConfirm={confirmDeleteProject}
+        loading={deleteProjectLoading}
+      />
+
+      {/* Remove member confirmation */}
+      <ConfirmDeleteDialog
+        open={!!removeMemberTarget}
+        onOpenChange={(open) => { if (!open) setRemoveMemberTarget(null); }}
+        title="Remove Member"
+        description={`Remove ${removeMemberTarget?.profile?.full_name ?? removeMemberTarget?.profile?.email ?? 'this member'} from this project?`}
+        confirmText={removeMemberTarget?.profile?.full_name ?? removeMemberTarget?.profile?.email ?? ''}
+        onConfirm={confirmRemoveMember}
+        loading={removeMemberLoading}
+      />
     </div>
   );
 }
