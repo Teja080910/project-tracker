@@ -156,6 +156,10 @@ CREATE TABLE IF NOT EXISTS activity_logs (
 -- Basic security: RLS on, permissive for authenticated only
 -- ============================================================
 
+ALTER TABLE roles ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "roles_read_authenticated" ON roles;
+CREATE POLICY "roles_read_authenticated" ON roles FOR SELECT TO authenticated USING (true);
+
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "profiles_all_authenticated" ON profiles;
 CREATE POLICY "profiles_all_authenticated" ON profiles FOR ALL TO authenticated USING (true) WITH CHECK (true);
