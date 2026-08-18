@@ -122,10 +122,15 @@ CREATE TABLE IF NOT EXISTS comments (
   user_id uuid NOT NULL DEFAULT auth.uid() REFERENCES profiles(id) ON DELETE CASCADE,
   message text NOT NULL CHECK (length(btrim(message)) > 0),
   image_path text,
+  file_type text,
+  file_name text,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   edited_at timestamptz
 );
+
+ALTER TABLE comments ADD COLUMN IF NOT EXISTS file_type text;
+ALTER TABLE comments ADD COLUMN IF NOT EXISTS file_name text;
 
 CREATE TABLE IF NOT EXISTS notifications (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

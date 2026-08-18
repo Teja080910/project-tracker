@@ -8,13 +8,14 @@ import {
   Trash2,
   Send,
   X,
-  Image as ImageIcon,
+  File as FileIcon,
   Loader2,
   History,
   MessageSquare,
   Calendar,
   User,
   Pencil,
+  Download,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -81,10 +82,10 @@ export default function TaskDetailPage() {
   const [imageUploading, setImageUploading] = useState(false);
   const [commentImage, setCommentImage] = useState<File | null>(null);
   const [commentImagePreview, setCommentImagePreview] = useState<string | null>(null);
+  const [previewFile, setPreviewFile] = useState<{ url: string; type: string } | null>(null);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [mentionIndex, setMentionIndex] = useState(0);
   const [mentionOpen, setMentionOpen] = useState(false);
-  const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [editTitle, setEditTitle] = useState('');
   const [editDescription, setEditDescription] = useState('');
@@ -242,6 +243,10 @@ export default function TaskDetailPage() {
     return data.publicUrl;
   };
 
+  const isImageType = (t: string | null) => !!t && t.startsWith('image/');
+  const isVideoType = (t: string | null) => !!t && t.startsWith('video/');
+  const isPdfType = (t: string | null) => t === 'application/pdf';
+
   // --- @mention support ---
   const mentionCandidates = members.filter((m) => {
     const q = (mentionQuery ?? '').toLowerCase();
@@ -347,20 +352,27 @@ export default function TaskDetailPage() {
     setCommentLoading(true);
 
     let imagePath: string | null = null;
+    let fileType: string | null = null;
+    let fileName: string | null = null;
     if (commentImage) {
       setImageUploading(true);
       const ext = commentImage.name.split('.').pop() ?? 'png';
-      const fileName = `${task.project_id}/${taskId}/comments/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      fileType = commentImage.type;
+      fileName = commentImage.name;
+      const storageName = `${task.project_id}/${taskId}/comments/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
       const { error: uploadError } = await supabase.storage
         .from('task-screenshots')
-        .upload(fileName, commentImage);
+        .upload(storageName, commentImage, {
+          contentType: fileType,
+          cacheControl: '3600',
+        });
       setImageUploading(false);
       if (uploadError) {
         toast.error(uploadError.message);
         setCommentLoading(false);
         return;
       }
-      imagePath = fileName;
+      imagePath = storageName;
     }
 
     const { error } = await supabase.from('comments').insert({
@@ -368,6 +380,8 @@ export default function TaskDetailPage() {
       user_id: user.id,
       message: newComment.trim() || ' ',
       image_path: imagePath,
+      file_type: fileType,
+      file_name: fileName,
     });
 
     if (error) {
@@ -720,12 +734,42 @@ export default function TaskDetailPage() {
                                 : 'bg-secondary/70 text-foreground rounded-tl-sm'
                             }`}
                           >
-                            {comment.image_path && (
+                            {comment.image_path && isImageType(comment.file_type) && (
                               <img
                                 src={getImageUrl(comment.image_path)}
                                 alt="comment"
                                 className="rounded-lg mb-2 max-h-48 w-auto cursor-pointer"
-                                onClick={() => setPreviewImage(getImageUrl(comment.image_path!))}
+                                onClick={() => setPreviewFile({ url: getImageUrl(comment.image_path!), type: 'image' })}
+                              />
+                            )}
+                            {comment.image_path && isVideoType(comment.file_type) && (
+                              <video
+                                src={getImageUrl(comment.image_path)}
+                                className="rounded-lg mb-2 max-h-64 w-auto cursor-pointer"
+                                controls
+                                preload="metadata"
+                                onClick={() => setPreviewFile({ url: getImageUrl(comment.image_path!), type: 'video' })}
+                              />
+                            )}
+                            {comment.image_path && isPdfType(comment.file_type) && (
+                              <button
+                                type="button"
+                                className="flex items-center gap-2 rounded-lg border border-border/60 bg-card/50 px-3 py-2 mb-2 w-full text-left hover:bg-accent/50 transition-colors"
+                                onClick={() => setPreviewFile({ url: getImageUrl(comment.image_path!), type: 'pdf' })}
+                              >
+                                <FileIcon className="h-6 w-6 text-primary shrink-0" />
+                                <span className="flex flex-col min-w-0">
+                                  <span className="text-sm font-medium truncate">{comment.file_name ?? 'document.pdf'}</span>
+                                  <span className="text-[11px] text-muted-foreground">PDF document — click to view</span>
+                                </span>
+                              </button>
+                            )}
+                            {comment.image_path && !comment.file_type && (
+                              <img
+                                src={getImageUrl(comment.image_path)}
+                                alt="comment"
+                                className="rounded-lg mb-2 max-h-48 w-auto cursor-pointer"
+                                onClick={() => setPreviewFile({ url: getImageUrl(comment.image_path!), type: 'image' })}
                               />
                             )}
                             {isEditingThis ? (
@@ -799,13 +843,27 @@ export default function TaskDetailPage() {
               <div className="flex gap-3 border-t border-border/60 p-4 shrink-0">
                 <UserAvatar profile={profile} className="h-8 w-8 shrink-0" />
                 <div className="flex-1 space-y-2">
-                  {commentImagePreview && (
-                    <div className="relative inline-block">
-                      <img
-                        src={commentImagePreview}
-                        alt="Attached"
-                        className="h-24 w-24 object-cover rounded-lg border border-border"
-                      />
+                  {commentImagePreview && commentImage && (
+                    <div className="relative inline-block max-w-[320px]">
+                      {isImageType(commentImage.type) ? (
+                        <img
+                          src={commentImagePreview}
+                          alt="Attached"
+                          className="h-24 w-24 object-cover rounded-lg border border-border"
+                        />
+                      ) : isVideoType(commentImage.type) ? (
+                        <video
+                          src={commentImagePreview}
+                          className="h-28 rounded-lg border border-border"
+                          controls
+                          muted
+                        />
+                      ) : (
+                        <div className="flex items-center gap-2 rounded-lg border border-border bg-secondary/50 px-3 py-2">
+                          <FileIcon className="h-8 w-8 text-muted-foreground shrink-0" />
+                          <span className="text-sm font-medium truncate max-w-[200px]">{commentImage.name}</span>
+                        </div>
+                      )}
                       <Button
                         variant="destructive"
                         size="icon"
@@ -859,11 +917,20 @@ export default function TaskDetailPage() {
                       <input
                         ref={commentImageInputRef}
                         type="file"
-                        accept="image/*"
+                        accept="image/*,video/*,application/pdf"
                         className="hidden"
                         onChange={(e) => {
                           const f = e.target.files?.[0];
                           if (f) {
+                            const ok = f.type.startsWith('image/') || f.type.startsWith('video/') || f.type === 'application/pdf';
+                            if (!ok) {
+                              toast.error('Only images, videos and PDF files are allowed');
+                              return;
+                            }
+                            if (f.size > 50 * 1024 * 1024) {
+                              toast.error('File too large (max 50 MB)');
+                              return;
+                            }
                             setCommentImage(f);
                             setCommentImagePreview(URL.createObjectURL(f));
                           }
@@ -879,9 +946,9 @@ export default function TaskDetailPage() {
                         {imageUploading ? (
                           <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                         ) : (
-                          <ImageIcon className="h-4 w-4 mr-2" />
+                          <FileIcon className="h-4 w-4 mr-2" />
                         )}
-                        {imageUploading ? 'Uploading...' : 'Image'}
+                        {imageUploading ? 'Uploading...' : 'Attach'}
                       </Button>
                     </div>
                     <Button
@@ -1151,14 +1218,33 @@ export default function TaskDetailPage() {
         </div>
       </div>
 
-      {/* Image preview modal */}
-      <Dialog open={!!previewImage} onOpenChange={() => setPreviewImage(null)}>
+      {/* File preview modal */}
+      <Dialog open={!!previewFile} onOpenChange={() => setPreviewFile(null)}>
         <DialogContent className="max-w-4xl">
-          <DialogHeader>
-            <DialogTitle>Screenshot</DialogTitle>
+          <DialogHeader className="flex flex-row items-center justify-between gap-4">
+            <DialogTitle>
+              {previewFile?.type === 'image' ? 'Image preview' : previewFile?.type === 'video' ? 'Video preview' : 'PDF preview'}
+            </DialogTitle>
+            {previewFile && (
+              <a
+                href={previewFile.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+              >
+                <Download className="h-3.5 w-3.5" />
+                Open / Download
+              </a>
+            )}
           </DialogHeader>
-          {previewImage && (
-            <img src={previewImage} alt="Full preview" className="w-full h-auto rounded-lg" />
+          {previewFile?.type === 'image' && (
+            <img src={previewFile.url} alt="Full preview" className="w-full h-auto rounded-lg" />
+          )}
+          {previewFile?.type === 'video' && (
+            <video src={previewFile.url} className="w-full h-auto rounded-lg" controls autoPlay />
+          )}
+          {previewFile?.type === 'pdf' && (
+            <iframe src={previewFile.url} title="PDF preview" className="w-full h-[70vh] rounded-lg border border-border/60" />
           )}
         </DialogContent>
       </Dialog>
