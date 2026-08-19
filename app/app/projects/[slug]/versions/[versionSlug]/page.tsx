@@ -253,6 +253,7 @@ export default function VersionDetailPage() {
           title: `New ${taskType} assigned: #${data.number}`,
           body: taskTitle.trim(),
           link: `/app/tasks/${data.id}`,
+          priority: taskPriority,
         });
       }
 

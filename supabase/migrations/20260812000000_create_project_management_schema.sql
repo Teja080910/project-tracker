@@ -141,9 +141,12 @@ CREATE TABLE IF NOT EXISTS notifications (
   title text NOT NULL,
   body text,
   link text,
+  priority text,
   read boolean NOT NULL DEFAULT false,
   created_at timestamptz NOT NULL DEFAULT now()
 );
+
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS priority text;
 
 CREATE TABLE IF NOT EXISTS activity_logs (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

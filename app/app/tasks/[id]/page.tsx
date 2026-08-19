@@ -83,9 +83,13 @@ export default function TaskDetailPage() {
   const [commentImage, setCommentImage] = useState<File | null>(null);
   const [commentImagePreview, setCommentImagePreview] = useState<string | null>(null);
   const [previewFile, setPreviewFile] = useState<{ url: string; type: string } | null>(null);
+  const [imageScale, setImageScale] = useState(1);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [mentionIndex, setMentionIndex] = useState(0);
   const [mentionOpen, setMentionOpen] = useState(false);
+  const [editMentionQuery, setEditMentionQuery] = useState<string | null>(null);
+  const [editMentionIndex, setEditMentionIndex] = useState(0);
+  const [editMentionOpen, setEditMentionOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editTitle, setEditTitle] = useState('');
   const [editDescription, setEditDescription] = useState('');
@@ -103,6 +107,7 @@ export default function TaskDetailPage() {
 
   const commentImageInputRef = useRef<HTMLInputElement>(null);
   const commentTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const editCommentTextareaRef = useRef<HTMLTextAreaElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const activityCardRef = useRef<HTMLDivElement>(null);
   const chatCardRef = useRef<HTMLDivElement>(null);
@@ -190,6 +195,10 @@ export default function TaskDetailPage() {
     if (ownerRes.data && !memberProfiles.some((p) => p.id === ownerRes.data.id)) {
       memberProfiles.push(ownerRes.data as Profile);
     }
+    // Include the reporter (ticket creator) so they can always be mentioned
+    if (task.reporter && !memberProfiles.some((p) => p.id === task.reporter?.id)) {
+      memberProfiles.push(task.reporter as Profile);
+    }
     setMembers(memberProfiles);
     setVersions((versionsRes.data as Version[]) ?? []);
 
@@ -256,36 +265,62 @@ export default function TaskDetailPage() {
     );
   });
 
-  const handleCommentChange = (value: string) => {
-    setNewComment(value);
-    const caret = commentTextareaRef.current?.selectionStart ?? value.length;
+  const editMentionCandidates = members.filter((m) => {
+    const q = (editMentionQuery ?? '').toLowerCase();
+    return (
+      (m.full_name ?? '').toLowerCase().includes(q) ||
+      m.email.toLowerCase().includes(q)
+    );
+  });
+
+  const handleMentionChange = (
+    value: string,
+    type: 'comment' | 'edit',
+    ref: React.RefObject<HTMLTextAreaElement>,
+    current: string,
+    setValue: (v: string) => void,
+    setQuery: (q: string | null) => void,
+    setIndex: (i: number) => void,
+    setOpen: (o: boolean) => void
+  ) => {
+    setValue(value);
+    const caret = ref.current?.selectionStart ?? value.length;
     const before = value.slice(0, caret);
     const atIdx = before.lastIndexOf('@');
     if (atIdx !== -1 && atIdx === before.length - 1) {
-      setMentionQuery('');
-      setMentionIndex(0);
-      setMentionOpen(true);
+      setQuery('');
+      setIndex(0);
+      setOpen(true);
     } else if (atIdx !== -1 && /^[a-zA-Z0-9._-]*$/.test(before.slice(atIdx + 1))) {
-      setMentionQuery(before.slice(atIdx + 1));
-      setMentionIndex(0);
-      setMentionOpen(true);
+      setQuery(before.slice(atIdx + 1));
+      setIndex(0);
+      setOpen(true);
     } else {
-      setMentionOpen(false);
+      setOpen(false);
     }
   };
 
-  const insertMention = (m: Profile) => {
-    if (!commentTextareaRef.current) return;
-    const caret = commentTextareaRef.current.selectionStart ?? newComment.length;
-    const before = newComment.slice(0, caret);
+  const insertMention = (
+    m: Profile,
+    type: 'comment' | 'edit',
+    ref: React.RefObject<HTMLTextAreaElement>,
+    current: string,
+    setValue: (v: string) => void,
+    setOpen: (o: boolean) => void,
+    setQuery: (q: string | null) => void
+  ) => {
+    if (!ref.current) return;
+    const caret = ref.current.selectionStart ?? current.length;
+    const before = current.slice(0, caret);
     const atIdx = before.lastIndexOf('@');
-    const after = newComment.slice(caret);
+    const after = current.slice(caret);
     const name = m.full_name ?? m.email;
     const next = `${before.slice(0, atIdx)}@${name} ${after}`;
-    setNewComment(next);
-    setMentionOpen(false);
+    setValue(next);
+    setOpen(false);
+    setQuery(null);
     requestAnimationFrame(() => {
-      const el = commentTextareaRef.current;
+      const el = ref.current;
       if (el) {
         const pos = atIdx + name.length + 2;
         el.focus();
@@ -294,27 +329,37 @@ export default function TaskDetailPage() {
     });
   };
 
-  const handleMentionKeyDown = (e: React.KeyboardEvent) => {
-    if (mentionOpen) {
+  const handleMentionKeyDown = (
+    e: React.KeyboardEvent,
+    type: 'comment' | 'edit',
+    open: boolean,
+    candidates: Profile[],
+    index: number,
+    setIndex: (i: number) => void,
+    setOpen: (o: boolean) => void,
+    insert: (m: Profile) => void,
+    submit: () => void
+  ) => {
+    if (open) {
       if (e.key === 'ArrowDown') {
         e.preventDefault();
-        setMentionIndex((i) => Math.min(i + 1, mentionCandidates.length - 1));
+        setIndex(Math.min(index + 1, candidates.length - 1));
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
-        setMentionIndex((i) => Math.max(i - 1, 0));
+        setIndex(Math.max(index - 1, 0));
       } else if (e.key === 'Enter' || e.key === 'Tab') {
-        if (mentionCandidates[mentionIndex]) {
+        if (candidates[index]) {
           e.preventDefault();
-          insertMention(mentionCandidates[mentionIndex]);
+          insert(candidates[index]);
         }
       } else if (e.key === 'Escape') {
-        setMentionOpen(false);
+        setOpen(false);
       }
       return;
     }
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
       e.preventDefault();
-      addComment();
+      submit();
     }
   };
 
@@ -405,6 +450,7 @@ export default function TaskDetailPage() {
         actor_id: user.id,
         project_id: task.project_id,
         link: `/app/tasks/${taskId}`,
+        priority: task.priority,
       };
 
       // Notify mentioned users
@@ -512,6 +558,7 @@ export default function TaskDetailPage() {
             title: `Status changed on #${task.number}`,
             body: `${task.status.replace('_', ' ')} → ${updates.status.replace('_', ' ')}`,
             link: `/app/tasks/${taskId}`,
+            priority: task.priority,
           });
           if (notifErr) throw notifErr;
           const assignee = members.find((m) => m.id === task.assignee_id);
@@ -536,6 +583,7 @@ export default function TaskDetailPage() {
             title: `Task assigned: #${task.number}`,
             body: task.title,
             link: `/app/tasks/${taskId}`,
+            priority: updates.priority ?? task.priority,
           });
           if (notifErr) throw notifErr;
           const newAssignee = members.find((m) => m.id === newAssigneeId);
@@ -774,13 +822,45 @@ export default function TaskDetailPage() {
                             )}
                             {isEditingThis ? (
                               <div className="space-y-2">
-                                <Textarea
-                                  value={editingCommentText}
-                                  onChange={(e) => setEditingCommentText(e.target.value)}
-                                  rows={2}
-                                  className="bg-background text-foreground text-sm"
-                                  autoFocus
-                                />
+                                <div className="relative">
+                                  <Textarea
+                                    ref={editCommentTextareaRef}
+                                    value={editingCommentText}
+                                    onChange={(e) => handleMentionChange(e.target.value, 'edit', editCommentTextareaRef, editingCommentText, setEditingCommentText, setEditMentionQuery, setEditMentionIndex, setEditMentionOpen)}
+                                    onKeyDown={(e) => handleMentionKeyDown(e, 'edit', editMentionOpen, editMentionCandidates, editMentionIndex, setEditMentionIndex, setEditMentionOpen, (m) => insertMention(m, 'edit', editCommentTextareaRef, editingCommentText, setEditingCommentText, setEditMentionOpen, setEditMentionQuery), saveCommentEdit)}
+                                    rows={2}
+                                    className="bg-background text-foreground text-sm"
+                                    autoFocus
+                                  />
+                                  {editMentionOpen && editMentionCandidates.length > 0 && (
+                                    <div className="absolute bottom-full mb-2 w-72 rounded-xl border border-border bg-popover shadow-elevated z-20 overflow-hidden animate-fade-in-scale">
+                                      <p className="px-3 py-1.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider border-b border-border/60">
+                                        Mention someone
+                                      </p>
+                                      <div className="max-h-48 overflow-y-auto p-1">
+                                        {editMentionCandidates.map((m, i) => (
+                                          <button
+                                            key={m.id}
+                                            type="button"
+                                            onMouseDown={(e) => { e.preventDefault(); insertMention(m, 'edit', editCommentTextareaRef, editingCommentText, setEditingCommentText, setEditMentionOpen, setEditMentionQuery); }}
+                                            onMouseEnter={() => setEditMentionIndex(i)}
+                                            className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm text-left transition-colors ${
+                                              i === editMentionIndex ? 'bg-accent text-accent-foreground' : ''
+                                            }`}
+                                          >
+                                            <UserAvatar profile={m} className="h-6 w-6 shrink-0" />
+                                            <span className="flex flex-col min-w-0">
+                                              <span className="truncate">{m.full_name ?? m.email}</span>
+                                              {m.full_name && (
+                                                <span className="text-[11px] text-muted-foreground truncate">{m.email}</span>
+                                              )}
+                                            </span>
+                                          </button>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
                                 <div className="flex gap-1.5 justify-end">
                                   <Button
                                     size="sm"
@@ -879,8 +959,8 @@ export default function TaskDetailPage() {
                       ref={commentTextareaRef}
                       placeholder="Write a comment... use @ to mention someone"
                       value={newComment}
-                      onChange={(e) => handleCommentChange(e.target.value)}
-                      onKeyDown={handleMentionKeyDown}
+                      onChange={(e) => handleMentionChange(e.target.value, 'comment', commentTextareaRef, newComment, setNewComment, setMentionQuery, setMentionIndex, setMentionOpen)}
+                      onKeyDown={(e) => handleMentionKeyDown(e, 'comment', mentionOpen, mentionCandidates, mentionIndex, setMentionIndex, setMentionOpen, (m) => insertMention(m, 'comment', commentTextareaRef, newComment, setNewComment, setMentionOpen, setMentionQuery), addComment)}
                       rows={3}
                     />
                     {mentionOpen && mentionCandidates.length > 0 && (
@@ -893,7 +973,7 @@ export default function TaskDetailPage() {
                             <button
                               key={m.id}
                               type="button"
-                              onMouseDown={(e) => { e.preventDefault(); insertMention(m); }}
+                              onMouseDown={(e) => { e.preventDefault(); insertMention(m, 'comment', commentTextareaRef, newComment, setNewComment, setMentionOpen, setMentionQuery); }}
                               onMouseEnter={() => setMentionIndex(i)}
                               className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm text-left transition-colors ${
                                 i === mentionIndex ? 'bg-accent text-accent-foreground' : ''
@@ -1219,32 +1299,50 @@ export default function TaskDetailPage() {
       </div>
 
       {/* File preview modal */}
-      <Dialog open={!!previewFile} onOpenChange={() => setPreviewFile(null)}>
+      <Dialog open={!!previewFile} onOpenChange={(open) => { if (!open) setPreviewFile(null); setImageScale(1); }}>
         <DialogContent className="max-w-4xl">
           <DialogHeader className="flex flex-row items-center justify-between gap-4">
             <DialogTitle>
               {previewFile?.type === 'image' ? 'Image preview' : previewFile?.type === 'video' ? 'Video preview' : 'PDF preview'}
             </DialogTitle>
-            {previewFile && (
-              <a
-                href={previewFile.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
-              >
-                <Download className="h-3.5 w-3.5" />
-                Open / Download
-              </a>
-            )}
+            <div className="flex items-center gap-3">
+              {previewFile?.type === 'image' && (
+                <div className="flex items-center gap-1.5 bg-secondary/80 rounded-md p-1">
+                  <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => setImageScale((s) => Math.max(0.5, s - 0.25))}>Zoom -</Button>
+                  <span className="text-xs px-1 font-mono">{Math.round(imageScale * 100)}%</span>
+                  <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => setImageScale((s) => Math.min(3, s + 0.25))}>Zoom +</Button>
+                  <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => setImageScale(1)}>Reset</Button>
+                </div>
+              )}
+              {previewFile && (
+                <a
+                  href={previewFile.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Open / Download
+                </a>
+              )}
+            </div>
           </DialogHeader>
           {previewFile?.type === 'image' && (
-            <img src={previewFile.url} alt="Full preview" className="w-full h-auto rounded-lg" />
+            <div className="overflow-auto max-h-[75vh] flex items-center justify-center p-2 bg-muted/30 rounded-lg">
+              <img
+                src={previewFile.url}
+                alt="Full preview"
+                style={{ transform: `scale(${imageScale})`, transformOrigin: 'center center', transition: 'transform 0.15s ease' }}
+                className="max-h-[70vh] w-auto object-contain rounded-lg cursor-pointer"
+                onClick={() => setImageScale((s) => (s === 1 ? 1.5 : s === 1.5 ? 2 : 1))}
+              />
+            </div>
           )}
           {previewFile?.type === 'video' && (
-            <video src={previewFile.url} className="w-full h-auto rounded-lg" controls autoPlay />
+            <video src={previewFile.url} className="w-full h-auto rounded-lg max-h-[75vh]" controls autoPlay />
           )}
           {previewFile?.type === 'pdf' && (
-            <iframe src={previewFile.url} title="PDF preview" className="w-full h-[70vh] rounded-lg border border-border/60" />
+            <iframe src={previewFile.url} title="PDF preview" className="w-full h-[75vh] rounded-lg border border-border/60" />
           )}
         </DialogContent>
       </Dialog>

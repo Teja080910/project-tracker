@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/sheet';
 import { ThemeToggle } from '@/components/shared/theme-toggle';
 import { UserAvatar } from '@/components/shared/user-avatar';
+import { PriorityBadge } from '@/components/shared/badges';
 import { useAuth } from '@/lib/auth-context';
 import { supabase } from '@/lib/supabase/client';
 import { formatRelativeTime, cn } from '@/lib/utils';
@@ -265,7 +266,12 @@ export function Topbar() {
                   <div className="flex items-start gap-2.5">
                     {!n.read && <span className="mt-1.5 h-2 w-2 rounded-full bg-primary shrink-0" />}
                     <div className={cn('min-w-0 flex-1', n.read && 'ml-4')}>
-                      <p className="text-sm font-medium truncate">{n.title}</p>
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <p className="text-sm font-medium truncate">{n.title}</p>
+                        {n.priority && (
+                          <PriorityBadge priority={n.priority} className="text-[9px] px-1 py-0 shrink-0" />
+                        )}
+                      </div>
                       {n.body && <p className="text-xs text-muted-foreground truncate mt-0.5">{n.body}</p>}
                       <p className="text-[10px] text-muted-foreground/60 mt-1">{formatRelativeTime(n.created_at)}</p>
                     </div>

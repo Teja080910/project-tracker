@@ -110,6 +110,7 @@ export interface Notification {
   title: string;
   body: string | null;
   link: string | null;
+  priority: TaskPriority | null;
   read: boolean;
   created_at: string;
   actor?: Profile | null;
