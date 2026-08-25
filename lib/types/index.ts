@@ -93,6 +93,8 @@ export interface Comment {
   user_id: string;
   message: string;
   image_path: string | null;
+  file_type: string | null;
+  file_name: string | null;
   created_at: string;
   updated_at: string;
   edited_at: string | null;
@@ -108,6 +110,7 @@ export interface Notification {
   title: string;
   body: string | null;
   link: string | null;
+  priority: TaskPriority | null;
   read: boolean;
   created_at: string;
   actor?: Profile | null;

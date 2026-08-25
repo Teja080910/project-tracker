@@ -10,6 +10,14 @@ import { EmptyState } from '@/components/shared/empty-state';
 import { PaginationControls } from '@/components/shared/pagination';
 import { UserAvatar } from '@/components/shared/user-avatar';
 import { ConfirmDeleteDialog } from '@/components/shared/confirm-delete-dialog';
+import { PriorityBadge } from '@/components/shared/badges';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { supabase } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth-context';
 import { formatRelativeTime } from '@/lib/utils';
@@ -33,6 +41,8 @@ export default function NotificationsPage() {
   const PAGE_SIZE = 10;
   const [deleteTarget, setDeleteTarget] = useState<Notification | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [priorityFilter, setPriorityFilter] = useState<string>('all');
+  const [typeFilter, setTypeFilter] = useState<string>('all');
 
   const fetchNotifications = useCallback(async () => {
     if (!user) return;
@@ -119,7 +129,15 @@ export default function NotificationsPage() {
   }
 
   const unreadCount = notifications.filter((n) => !n.read).length;
-  const pageItems = notifications.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const filtered = notifications.filter((n) => {
+    if (priorityFilter !== 'all' && n.priority !== priorityFilter) return false;
+    if (typeFilter !== 'all' && n.type !== typeFilter) return false;
+    return true;
+  });
+  const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  const priorityOptions = ['all', 'low', 'medium', 'high', 'critical'];
+  const typeOptions = ['all', 'mention', 'comment_added', 'task_assigned', 'status_changed', 'member_added', 'welcome'];
 
   return (
     <div className="space-y-6">
@@ -138,7 +156,39 @@ export default function NotificationsPage() {
         )}
       </div>
 
-      {notifications.length === 0 ? (
+      <div className="flex flex-wrap items-center gap-2 animate-fade-in-up">
+        <Select value={priorityFilter} onValueChange={setPriorityFilter}>
+          <SelectTrigger className="w-36 h-9 text-sm">
+            <SelectValue placeholder="Priority" />
+          </SelectTrigger>
+          <SelectContent>
+            {priorityOptions.map((p) => (
+              <SelectItem key={p} value={p}>
+                {p === 'all' ? 'All priorities' : p.charAt(0).toUpperCase() + p.slice(1)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={typeFilter} onValueChange={setTypeFilter}>
+          <SelectTrigger className="w-40 h-9 text-sm">
+            <SelectValue placeholder="Type" />
+          </SelectTrigger>
+          <SelectContent>
+            {typeOptions.map((t) => (
+              <SelectItem key={t} value={t}>
+                {t === 'all' ? 'All types' : t.replace(/_/g, ' ')}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {(priorityFilter !== 'all' || typeFilter !== 'all') && (
+          <Button variant="ghost" size="sm" className="h-9 text-xs" onClick={() => { setPriorityFilter('all'); setTypeFilter('all'); }}>
+            Clear filters
+          </Button>
+        )}
+      </div>
+
+      {filtered.length === 0 ? (
         <Card>
           <CardContent className="py-6">
             <EmptyState icon={Bell} title="No notifications" description="You're all caught up!" />
@@ -161,7 +211,12 @@ export default function NotificationsPage() {
                   <Icon className="h-4 w-4" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium">{n.title}</p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-sm font-medium">{n.title}</p>
+                    {n.priority && (
+                      <PriorityBadge priority={n.priority} className="text-[10px] px-1.5 py-0" />
+                    )}
+                  </div>
                   {n.body && <p className="text-xs text-muted-foreground mt-0.5">{n.body}</p>}
                   <div className="flex items-center gap-2 mt-1.5 text-[11px] text-muted-foreground">
                     {n.actor && (
@@ -214,7 +269,7 @@ export default function NotificationsPage() {
       <PaginationControls
         page={page}
         pageSize={PAGE_SIZE}
-        total={notifications.length}
+        total={filtered.length}
         onPageChange={setPage}
       />
 
