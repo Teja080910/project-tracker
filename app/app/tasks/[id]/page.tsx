@@ -113,12 +113,18 @@ export default function TaskDetailPage() {
   const chatCardRef = useRef<HTMLDivElement>(null);
   const [chatHeight, setChatHeight] = useState(420);
 
-  // Chat card bottom = activity card bottom; chat height = activity bottom - chat top
+  // Chat card bottom = activity card bottom (desktop side-by-side only);
+  // keep chat height synced to activity height without self-triggering.
   useEffect(() => {
     const activityEl = activityCardRef.current;
-    const chatEl = chatCardRef.current;
-    if (!activityEl || !chatEl) return;
+    if (!activityEl) return;
     const sync = () => {
+      const chatEl = chatCardRef.current;
+      if (!chatEl) return;
+      if (window.innerWidth < 1024) {
+        setChatHeight(420);
+        return;
+      }
       const activityBottom = activityEl.getBoundingClientRect().bottom;
       const chatTop = chatEl.getBoundingClientRect().top;
       const h = Math.max(200, Math.round(activityBottom - chatTop));
@@ -127,7 +133,6 @@ export default function TaskDetailPage() {
     sync();
     const observer = new ResizeObserver(sync);
     observer.observe(activityEl);
-    observer.observe(chatEl);
     window.addEventListener('resize', sync);
     return () => {
       observer.disconnect();
