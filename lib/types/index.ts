@@ -2,7 +2,7 @@ export type Role = 'super_admin' | 'project_admin' | 'developer' | 'tester' | 'v
 export type ProjectStatus = 'active' | 'completed' | 'archived';
 export type VersionStatus = 'active' | 'released' | 'archived';
 export type TaskType = 'task' | 'bug' | 'story' | 'issue';
-export type TaskStatus = 'open' | 'in_progress' | 'completed' | 'cancelled';
+export type TaskStatus = 'open' | 'in_progress' | 'testing' | 'test_release' | 'released' | 'completed' | 'cancelled';
 export type TaskPriority = 'low' | 'medium' | 'high' | 'critical';
 
 export interface Profile {

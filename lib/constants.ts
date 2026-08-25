@@ -7,6 +7,9 @@ import {
   ListTodo,
   BookHeadphones,
   AlertTriangle,
+  FlaskConical,
+  Rocket,
+  BadgeCheck,
   type LucideIcon,
 } from 'lucide-react';
 import type { TaskPriority, TaskStatus, TaskType } from '@/lib/types';
@@ -21,6 +24,9 @@ export const TASK_TYPES: { value: TaskType; label: string; icon: LucideIcon; col
 export const TASK_STATUSES: { value: TaskStatus; label: string; icon: LucideIcon; color: string }[] = [
   { value: 'open', label: 'Open', icon: Circle, color: 'gray' },
   { value: 'in_progress', label: 'In Progress', icon: CircleDot, color: 'blue' },
+  { value: 'testing', label: 'Testing', icon: FlaskConical, color: 'purple' },
+  { value: 'test_release', label: 'Test Release', icon: Rocket, color: 'amber' },
+  { value: 'released', label: 'Released', icon: BadgeCheck, color: 'green' },
   { value: 'completed', label: 'Completed', icon: CheckCircle2, color: 'green' },
   { value: 'cancelled', label: 'Cancelled', icon: CircleSlash, color: 'red' },
 ];

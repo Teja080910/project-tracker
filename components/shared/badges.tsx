@@ -10,6 +10,7 @@ const colorClasses: Record<string, string> = {
   green: 'bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20',
   red: 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20',
   amber: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20',
+  purple: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20',
 };
 
 export function StatusBadge({ status, className }: { status: string; className?: string }) {
