@@ -127,7 +127,9 @@ export default function TaskDetailPage() {
       }
       const activityBottom = activityEl.getBoundingClientRect().bottom;
       const chatTop = chatEl.getBoundingClientRect().top;
-      const h = Math.max(200, Math.round(activityBottom - chatTop));
+      // Cap to viewport so the composer (Attach/Send) never falls below the fold
+      const viewportLimit = window.innerHeight - 16;
+      const h = Math.max(200, Math.round(Math.min(activityBottom, viewportLimit) - chatTop));
       setChatHeight(h);
     };
     sync();
