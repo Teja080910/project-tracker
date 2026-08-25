@@ -171,7 +171,7 @@ function VersionDetailContent() {
     const matchesAssignee =
       filterAssignee === 'all' ||
       (filterAssignee === 'unassigned' && !t.assignee_id) ||
-      t.assignee_id === filterAssignee;
+      t.assignee?.email === filterAssignee;
     return matchesSearch && matchesStatus && matchesType && matchesPriority && matchesAssignee;
   });
 
@@ -654,7 +654,7 @@ function VersionDetailContent() {
             <SelectItem value="all">All Assignees</SelectItem>
             <SelectItem value="unassigned">Unassigned</SelectItem>
             {assignees.map((m) => (
-              <SelectItem key={m.id} value={m.id}>{m.full_name ?? m.email}</SelectItem>
+              <SelectItem key={m.id} value={m.email}>{m.full_name ?? m.email}</SelectItem>
             ))}
           </SelectContent>
         </Select>
