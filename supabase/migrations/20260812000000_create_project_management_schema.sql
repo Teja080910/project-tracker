@@ -122,10 +122,15 @@ CREATE TABLE IF NOT EXISTS comments (
   user_id uuid NOT NULL DEFAULT auth.uid() REFERENCES profiles(id) ON DELETE CASCADE,
   message text NOT NULL CHECK (length(btrim(message)) > 0),
   image_path text,
+  file_type text,
+  file_name text,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   edited_at timestamptz
 );
+
+ALTER TABLE comments ADD COLUMN IF NOT EXISTS file_type text;
+ALTER TABLE comments ADD COLUMN IF NOT EXISTS file_name text;
 
 CREATE TABLE IF NOT EXISTS notifications (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -136,9 +141,12 @@ CREATE TABLE IF NOT EXISTS notifications (
   title text NOT NULL,
   body text,
   link text,
+  priority text,
   read boolean NOT NULL DEFAULT false,
   created_at timestamptz NOT NULL DEFAULT now()
 );
+
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS priority text;
 
 CREATE TABLE IF NOT EXISTS activity_logs (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -155,6 +163,10 @@ CREATE TABLE IF NOT EXISTS activity_logs (
 -- ============================================================
 -- Basic security: RLS on, permissive for authenticated only
 -- ============================================================
+
+ALTER TABLE roles ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "roles_read_authenticated" ON roles;
+CREATE POLICY "roles_read_authenticated" ON roles FOR SELECT TO authenticated USING (true);
 
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "profiles_all_authenticated" ON profiles;
