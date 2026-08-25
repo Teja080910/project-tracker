@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { Suspense, useEffect, useState, useCallback } from 'react';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Tag, Plus, Calendar, Search, Settings, Loader2, Check, ChevronsUpDown } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
@@ -52,8 +52,17 @@ import { toast } from 'sonner';
 import type { Version, Task, Project, Profile } from '@/lib/types';
 
 export default function VersionDetailPage() {
+  return (
+    <Suspense fallback={null}>
+      <VersionDetailContent />
+    </Suspense>
+  );
+}
+
+function VersionDetailContent() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user } = useAuth();
   const projectSlug = params.slug as string;
   const versionSlug = params.versionSlug as string;
@@ -62,11 +71,11 @@ export default function VersionDetailPage() {
   const [project, setProject] = useState<Project | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [filterStatus, setFilterStatus] = useState<string>('all');
-  const [filterType, setFilterType] = useState<string>('all');
-  const [filterPriority, setFilterPriority] = useState<string>('all');
-  const [filterAssignee, setFilterAssignee] = useState<string>('all');
+  const [search, setSearch] = useState(() => searchParams.get('q') ?? '');
+  const [filterStatus, setFilterStatus] = useState<string>(() => searchParams.get('status') ?? 'all');
+  const [filterType, setFilterType] = useState<string>(() => searchParams.get('type') ?? 'all');
+  const [filterPriority, setFilterPriority] = useState<string>(() => searchParams.get('priority') ?? 'all');
+  const [filterAssignee, setFilterAssignee] = useState<string>(() => searchParams.get('assignee') ?? 'all');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [editName, setEditName] = useState('');
   const [editDescription, setEditDescription] = useState('');
@@ -75,6 +84,19 @@ export default function VersionDetailPage() {
   const [saving, setSaving] = useState(false);
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 10;
+
+  const updateParams = useCallback(
+    (updates: Record<string, string>) => {
+      const sp = new URLSearchParams(searchParams.toString());
+      for (const [key, value] of Object.entries(updates)) {
+        if (!value || value === 'all') sp.delete(key);
+        else sp.set(key, value);
+      }
+      const qs = sp.toString();
+      router.replace(`${window.location.pathname}${qs ? `?${qs}` : ''}`, { scroll: false });
+    },
+    [searchParams, router]
+  );
 
   // New task modal state
   const [taskModalOpen, setTaskModalOpen] = useState(false);
@@ -556,11 +578,21 @@ export default function VersionDetailPage() {
           <Input
             placeholder="Search tasks..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              updateParams({ q: e.target.value });
+            }}
             className="pl-9 h-9"
           />
         </div>
-        <Select value={filterStatus} onValueChange={setFilterStatus}>
+        <Select
+          value={filterStatus}
+          onValueChange={(v) => {
+            setFilterStatus(v);
+            setPage(1);
+            updateParams({ status: v });
+          }}
+        >
           <SelectTrigger className="h-9 w-36">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
@@ -571,7 +603,14 @@ export default function VersionDetailPage() {
             ))}
           </SelectContent>
         </Select>
-        <Select value={filterType} onValueChange={setFilterType}>
+        <Select
+          value={filterType}
+          onValueChange={(v) => {
+            setFilterType(v);
+            setPage(1);
+            updateParams({ type: v });
+          }}
+        >
           <SelectTrigger className="h-9 w-32">
             <SelectValue placeholder="Type" />
           </SelectTrigger>
@@ -582,7 +621,14 @@ export default function VersionDetailPage() {
             ))}
           </SelectContent>
         </Select>
-        <Select value={filterPriority} onValueChange={setFilterPriority}>
+        <Select
+          value={filterPriority}
+          onValueChange={(v) => {
+            setFilterPriority(v);
+            setPage(1);
+            updateParams({ priority: v });
+          }}
+        >
           <SelectTrigger className="h-9 w-36">
             <SelectValue placeholder="Priority" />
           </SelectTrigger>
@@ -593,7 +639,14 @@ export default function VersionDetailPage() {
             ))}
           </SelectContent>
         </Select>
-        <Select value={filterAssignee} onValueChange={setFilterAssignee}>
+        <Select
+          value={filterAssignee}
+          onValueChange={(v) => {
+            setFilterAssignee(v);
+            setPage(1);
+            updateParams({ assignee: v });
+          }}
+        >
           <SelectTrigger className="h-9 w-40">
             <SelectValue placeholder="Assignee" />
           </SelectTrigger>

@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { Suspense, useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Bell, CheckCheck, Trash2, FolderKanban, Sparkles, MessageSquare, UserPlus, Tag, AlertCircle } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -34,6 +35,16 @@ const TYPE_META: Record<string, { icon: typeof Bell; color: string }> = {
 };
 
 export default function NotificationsPage() {
+  return (
+    <Suspense fallback={null}>
+      <NotificationsContent />
+    </Suspense>
+  );
+}
+
+function NotificationsContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const { user } = useAuth();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
@@ -41,8 +52,21 @@ export default function NotificationsPage() {
   const PAGE_SIZE = 10;
   const [deleteTarget, setDeleteTarget] = useState<Notification | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
-  const [priorityFilter, setPriorityFilter] = useState<string>('all');
-  const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [priorityFilter, setPriorityFilter] = useState<string>(() => searchParams.get('priority') ?? 'all');
+  const [typeFilter, setTypeFilter] = useState<string>(() => searchParams.get('type') ?? 'all');
+
+  const updateParams = useCallback(
+    (updates: Record<string, string>) => {
+      const sp = new URLSearchParams(searchParams.toString());
+      for (const [key, value] of Object.entries(updates)) {
+        if (!value || value === 'all') sp.delete(key);
+        else sp.set(key, value);
+      }
+      const qs = sp.toString();
+      router.replace(`${window.location.pathname}${qs ? `?${qs}` : ''}`, { scroll: false });
+    },
+    [searchParams, router]
+  );
 
   const fetchNotifications = useCallback(async () => {
     if (!user) return;
@@ -157,7 +181,14 @@ export default function NotificationsPage() {
       </div>
 
       <div className="flex flex-wrap items-center gap-2 animate-fade-in-up">
-        <Select value={priorityFilter} onValueChange={setPriorityFilter}>
+        <Select
+          value={priorityFilter}
+          onValueChange={(v) => {
+            setPriorityFilter(v);
+            setPage(1);
+            updateParams({ priority: v });
+          }}
+        >
           <SelectTrigger className="w-36 h-9 text-sm">
             <SelectValue placeholder="Priority" />
           </SelectTrigger>
@@ -169,7 +200,14 @@ export default function NotificationsPage() {
             ))}
           </SelectContent>
         </Select>
-        <Select value={typeFilter} onValueChange={setTypeFilter}>
+        <Select
+          value={typeFilter}
+          onValueChange={(v) => {
+            setTypeFilter(v);
+            setPage(1);
+            updateParams({ type: v });
+          }}
+        >
           <SelectTrigger className="w-40 h-9 text-sm">
             <SelectValue placeholder="Type" />
           </SelectTrigger>
@@ -182,7 +220,7 @@ export default function NotificationsPage() {
           </SelectContent>
         </Select>
         {(priorityFilter !== 'all' || typeFilter !== 'all') && (
-          <Button variant="ghost" size="sm" className="h-9 text-xs" onClick={() => { setPriorityFilter('all'); setTypeFilter('all'); }}>
+          <Button variant="ghost" size="sm" className="h-9 text-xs" onClick={() => { setPriorityFilter('all'); setTypeFilter('all'); updateParams({ priority: 'all', type: 'all' }); }}>
             Clear filters
           </Button>
         )}
