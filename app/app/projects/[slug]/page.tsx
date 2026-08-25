@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -17,6 +17,9 @@ import {
   Check,
   Loader2,
   Search,
+  Package,
+  Copy,
+  Upload,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -50,7 +53,7 @@ import { sendNotificationEmail } from '@/lib/email-client';
 import { getProjectStatusMeta, getRoleLabel, getVersionStatusMeta } from '@/lib/constants';
 import { formatDate, cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import type { Project, ProjectMember, Profile, Version } from '@/lib/types';
+import type { Project, ProjectMember, Profile, Version, ProjectApk } from '@/lib/types';
 
 export default function ProjectDetailPage() {
   const params = useParams();
@@ -81,9 +84,15 @@ export default function ProjectDetailPage() {
   const [removeMemberTarget, setRemoveMemberTarget] = useState<ProjectMember | null>(null);
   const [removeMemberLoading, setRemoveMemberLoading] = useState(false);
 
+  // APK builds
+  const [apks, setApks] = useState<ProjectApk[]>([]);
+  const [apkUploading, setApkUploading] = useState(false);
+  const apkInputRef = useRef<HTMLInputElement>(null);
+
   const isSuperAdmin = profile?.role === 'super_admin';
   const [myRole, setMyRole] = useState<string | null>(null);
   const canManage = isSuperAdmin || myRole === 'project_admin' || project?.owner_id === user?.id;
+  const canUploadApk = canManage || myRole === 'developer';
 
   const fetchProject = useCallback(async () => {
     if (!user) return;
@@ -126,6 +135,49 @@ export default function ProjectDetailPage() {
   useEffect(() => {
     fetchProject();
   }, [fetchProject]);
+
+  const getPublicApkUrl = (storagePath: string) =>
+    supabase.storage.from('apks').getPublicUrl(storagePath).data.publicUrl;
+
+  const fetchApks = useCallback(async () => {
+    if (!project) return;
+    const { data } = await supabase
+      .from('project_apks')
+      .select('*, uploader:profiles(*)')
+      .eq('project_id', project.id)
+      .order('created_at', { ascending: false });
+    setApks((data as unknown as ProjectApk[]) ?? []);
+  }, [project]);
+
+  useEffect(() => {
+    fetchApks();
+  }, [fetchApks]);
+
+  const handleApkUpload = async (file: File) => {
+    if (!user || !project) return;
+    setApkUploading(true);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      const form = new FormData();
+      form.append('file', file);
+      form.append('projectId', project.id);
+      const res = await fetch('/api/apk/upload', {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        body: form,
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? 'Upload failed');
+      toast.success('APK uploaded');
+      fetchApks();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setApkUploading(false);
+      if (apkInputRef.current) apkInputRef.current.value = '';
+    }
+  };
 
   const addMember = async () => {
     if (!newMemberId) {
@@ -664,6 +716,75 @@ export default function ProjectDetailPage() {
                     {getRoleLabel(member.role)}
                   </Badge>
                 )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* APK Builds */}
+      <div className="space-y-3 animate-fade-in-up">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-medium flex items-center gap-2">
+            <Package className="h-4 w-4" />
+            APK Builds
+            <Badge variant="secondary" className="text-xs">{apks.length}/10</Badge>
+          </h3>
+          {canUploadApk && (
+            <>
+              <input
+                ref={apkInputRef}
+                type="file"
+                accept=".apk"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) handleApkUpload(f);
+                }}
+              />
+              <Button size="sm" onClick={() => apkInputRef.current?.click()} disabled={apkUploading}>
+                {apkUploading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
+                Upload APK
+              </Button>
+            </>
+          )}
+        </div>
+
+        {apks.length === 0 ? (
+          <Card>
+            <CardContent className="py-6">
+              <EmptyState icon={Package} title="No APK builds yet" description="Uploaded builds appear here (max 10 kept)" />
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-1">
+            {apks.map((apk) => (
+              <div key={apk.id} className="flex items-center gap-3 px-3 py-2 rounded-md border border-border">
+                <Package className="h-5 w-5 text-muted-foreground shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{apk.file_name}</p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {(apk.size_bytes / (1024 * 1024)).toFixed(1)} MB · {formatDate(apk.created_at)}
+                    {apk.uploader ? ` · by ${apk.uploader.full_name ?? apk.uploader.email}` : ''}
+                  </p>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 text-xs shrink-0"
+                  onClick={() => {
+                    navigator.clipboard.writeText(getPublicApkUrl(apk.storage_path));
+                    toast.success('Download link copied');
+                  }}
+                >
+                  <Copy className="h-3.5 w-3.5 mr-1" />
+                  Copy Link
+                </Button>
+                <a href={getPublicApkUrl(apk.storage_path)} download={apk.file_name} className="shrink-0">
+                  <Button variant="outline" size="sm" className="h-8 text-xs">
+                    Download
+                  </Button>
+                </a>
               </div>
             ))}
           </div>

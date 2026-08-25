@@ -17,6 +17,26 @@ export interface Profile {
   updated_at: string;
 }
 
+export interface PersonalAccessToken {
+  id: string;
+  user_id: string;
+  name: string;
+  token_hash: string;
+  created_at: string;
+  last_used_at: string | null;
+}
+
+export interface ProjectApk {
+  id: string;
+  project_id: string;
+  uploaded_by: string | null;
+  file_name: string;
+  size_bytes: number;
+  storage_path: string;
+  created_at: string;
+  uploader?: Profile | null;
+}
+
 export interface Project {
   id: string;
   name: string;

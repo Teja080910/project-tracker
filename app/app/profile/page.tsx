@@ -12,7 +12,8 @@ import { UserAvatar } from '@/components/shared/user-avatar';
 import { getRoleLabel } from '@/lib/constants';
 import { formatDate } from '@/lib/utils';
 import { toast } from 'sonner';
-import { Loader2, Camera, X } from 'lucide-react';
+import { Loader2, Camera, X, KeyRound, Copy, Trash2 } from 'lucide-react';
+import type { PersonalAccessToken } from '@/lib/types';
 
 export default function ProfilePage() {
   const { user, profile, refreshProfile } = useAuth();
@@ -118,6 +119,61 @@ export default function ProfilePage() {
     setLoading(false);
   };
 
+  // Personal access tokens
+  const [tokens, setTokens] = useState<PersonalAccessToken[]>([]);
+  const [tokenName, setTokenName] = useState('');
+  const [newToken, setNewToken] = useState<string | null>(null);
+  const [creatingToken, setCreatingToken] = useState(false);
+
+  const fetchTokens = async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from('personal_access_tokens')
+      .select('id, user_id, name, created_at, last_used_at')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false });
+    setTokens((data as unknown as PersonalAccessToken[]) ?? []);
+  };
+
+  useEffect(() => {
+    fetchTokens();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
+  const generateToken = async () => {
+    if (!user) return;
+    const bytes = new Uint8Array(32);
+    crypto.getRandomValues(bytes);
+    const raw = 'tf_' + Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('');
+    const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw))))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('');
+    setCreatingToken(true);
+    const { error } = await supabase.from('personal_access_tokens').insert({
+      user_id: user.id,
+      name: tokenName.trim() || 'apk-upload',
+      token_hash: hash,
+    });
+    setCreatingToken(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    setNewToken(raw);
+    setTokenName('');
+    fetchTokens();
+  };
+
+  const revokeToken = async (id: string) => {
+    const { error } = await supabase.from('personal_access_tokens').delete().eq('id', id);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success('Token revoked');
+    fetchTokens();
+  };
+
   return (
     <div className="max-w-2xl space-y-6">
       <div className="animate-fade-in-up">
@@ -217,6 +273,81 @@ export default function ProfilePage() {
               Save Changes
             </Button>
           </form>
+        </CardContent>
+      </Card>
+
+      <Card className="card-hover animate-fade-in-up stagger-2">
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <KeyRound className="h-4 w-4" />
+            Personal Access Tokens
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Use tokens to upload APK builds from your machine without logging in.
+          </p>
+
+          {newToken && (
+            <div className="rounded-lg border border-amber-500/50 bg-amber-500/10 p-3 space-y-2">
+              <p className="text-sm font-medium">Copy your token now — it won't be shown again:</p>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 text-xs break-all rounded bg-muted px-2 py-1.5">{newToken}</code>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="outline"
+                  className="h-8 w-8 shrink-0"
+                  onClick={() => {
+                    navigator.clipboard.writeText(newToken);
+                    toast.success('Token copied');
+                  }}
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-center gap-2">
+            <Input
+              placeholder="Token name (e.g. my-laptop)"
+              value={tokenName}
+              onChange={(e) => setTokenName(e.target.value)}
+              className="max-w-xs"
+            />
+            <Button type="button" onClick={generateToken} disabled={creatingToken}>
+              {creatingToken && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Generate Token
+            </Button>
+          </div>
+
+          <div className="space-y-2">
+            {tokens.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No tokens yet.</p>
+            ) : (
+              tokens.map((t) => (
+                <div key={t.id} className="flex items-center justify-between rounded-lg border px-3 py-2">
+                  <div>
+                    <p className="text-sm font-medium">{t.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Created {formatDate(t.created_at)}
+                      {t.last_used_at ? ` · Last used ${formatDate(t.last_used_at)}` : ' · Never used'}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                    onClick={() => revokeToken(t.id)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ))
+            )}
+          </div>
         </CardContent>
       </Card>
     </div>
