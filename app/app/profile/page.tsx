@@ -17,12 +17,14 @@ import { Loader2, Camera, X } from 'lucide-react';
 export default function ProfilePage() {
   const { user, profile, refreshProfile } = useAuth();
   const [fullName, setFullName] = useState('');
+  const [githubId, setGithubId] = useState('');
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setFullName(profile?.full_name ?? '');
+    setGithubId(profile?.github_id ?? '');
   }, [profile]);
 
   const getAvatarUrl = (path: string) => {
@@ -98,10 +100,14 @@ export default function ProfilePage() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
+    if (!githubId.trim()) {
+      toast.error('GitHub ID or email is required');
+      return;
+    }
     setLoading(true);
     const { error } = await supabase
       .from('profiles')
-      .update({ full_name: fullName })
+      .update({ full_name: fullName, github_id: githubId.trim() })
       .eq('id', user.id);
     if (error) {
       toast.error(error.message);
@@ -185,6 +191,18 @@ export default function ProfilePage() {
             <div className="space-y-2">
               <Label htmlFor="name">Full Name</Label>
               <Input id="name" value={fullName} onChange={(e) => setFullName(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="github-id">
+                GitHub ID / Email <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="github-id"
+                placeholder="e.g. teja-dev or you@example.com"
+                value={githubId}
+                onChange={(e) => setGithubId(e.target.value)}
+                required
+              />
             </div>
             <div className="space-y-2">
               <Label>Email</Label>

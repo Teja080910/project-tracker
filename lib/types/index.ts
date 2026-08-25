@@ -12,6 +12,7 @@ export interface Profile {
   avatar_url: string | null;
   role: Role;
   disabled: boolean;
+  github_id: string | null;
   created_at: string;
   updated_at: string;
 }

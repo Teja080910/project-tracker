@@ -5,6 +5,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { Sidebar } from '@/components/shared/sidebar';
 import { Topbar } from '@/components/shared/topbar';
+import { GithubIdPrompt } from '@/components/shared/github-id-prompt';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -51,6 +52,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
         </main>
       </div>
+      <GithubIdPrompt />
     </div>
   );
 }
