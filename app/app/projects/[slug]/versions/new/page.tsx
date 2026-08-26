@@ -17,9 +17,10 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { BackButton } from '@/components/shared/back-button';
 import { DatePicker } from '@/components/shared/date-picker';
 import { toast } from 'sonner';
-import { Loader2, ArrowLeft, Shield } from 'lucide-react';
+import { Loader2, Shield } from 'lucide-react';
 
 export default function NewVersionPage() {
   const params = useParams();
@@ -92,11 +93,7 @@ export default function NewVersionPage() {
     return (
       <div className="max-w-2xl space-y-6">
         <div className="flex items-center gap-3 animate-fade-in-up">
-          <Button variant="ghost" size="icon" asChild className="hover:scale-105 transition-transform duration-200">
-            <Link href={`/app/projects/${projectSlug}`}>
-              <ArrowLeft className="h-4 w-4" />
-            </Link>
-          </Button>
+<BackButton fallbackHref={`/app/projects/${projectSlug}`} />
           <h1 className="text-2xl font-semibold tracking-tight">New Version</h1>
         </div>
         <Card>
@@ -110,11 +107,7 @@ export default function NewVersionPage() {
     return (
       <div className="max-w-2xl space-y-6">
         <div className="flex items-center gap-3 animate-fade-in-up">
-          <Button variant="ghost" size="icon" asChild className="hover:scale-105 transition-transform duration-200">
-            <Link href={`/app/projects/${projectSlug}`}>
-              <ArrowLeft className="h-4 w-4" />
-            </Link>
-          </Button>
+<BackButton fallbackHref={`/app/projects/${projectSlug}`} />
           <h1 className="text-2xl font-semibold tracking-tight">New Version</h1>
         </div>
         <Card>
@@ -133,11 +126,7 @@ export default function NewVersionPage() {
   return (
     <div className="max-w-2xl space-y-6">
       <div className="flex items-center gap-3 animate-fade-in-up">
-        <Button variant="ghost" size="icon" asChild className="hover:scale-105 transition-transform duration-200">
-          <Link href={`/app/projects/${projectSlug}`}>
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
-        </Button>
+        <BackButton fallbackHref={`/app/projects/${projectSlug}`} />
         <h1 className="text-2xl font-semibold tracking-tight">New Version</h1>
       </div>
 
