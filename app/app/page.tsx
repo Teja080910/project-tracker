@@ -218,7 +218,7 @@ export default function DashboardPage() {
               myAssignedTasks.map((task) => (
                 <Link
                   key={task.id}
-                  href={`/app/tasks/${task.id}`}
+                  href={`/app/tasks/${task.number}`}
                   className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-accent/50 transition-all duration-200 group row-hover"
                 >
                   <TypeBadge type={task.type} />
@@ -262,7 +262,7 @@ export default function DashboardPage() {
               recentTasks.map((task) => (
                 <Link
                   key={task.id}
-                  href={`/app/tasks/${task.id}`}
+                  href={`/app/tasks/${task.number}`}
                   className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-accent/50 transition-all duration-200 group row-hover"
                 >
                   <TypeBadge type={task.type} />

@@ -199,7 +199,7 @@ export function Topbar() {
                 {searchResults.tasks.map((t) => (
                   <Link
                     key={t.id}
-                    href={`/app/tasks/${t.id}`}
+                    href={`/app/tasks/${t.number}`}
                     className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-lg hover:bg-accent transition-colors duration-150"
                   >
                     <span className="text-[11px] font-mono text-muted-foreground">#{t.number}</span>

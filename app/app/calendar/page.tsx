@@ -199,7 +199,7 @@ export default function CalendarPage() {
                 {selectedTasks.map((task) => (
                   <Link
                     key={task.id}
-                    href={`/app/tasks/${task.id}`}
+                    href={`/app/tasks/${task.number}`}
                     className="block p-3 rounded-lg border border-border/60 hover:border-primary/25 hover:shadow-soft transition-all duration-200 group"
                   >
                     <div className="flex items-center justify-between gap-2 mb-1.5">

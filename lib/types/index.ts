@@ -28,6 +28,7 @@ export interface PersonalAccessToken {
 
 export interface ProjectApk {
   id: string;
+  number: number;
   project_id: string;
   uploaded_by: string | null;
   file_name: string;

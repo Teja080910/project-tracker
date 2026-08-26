@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Tag, Plus, Calendar, Search, Settings, Loader2, Check, ChevronsUpDown } from 'lucide-react';
+import { Tag, Plus, Calendar, Search, Settings, Loader2, Check, ChevronsUpDown } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -39,6 +39,7 @@ import {
   CommandItem,
   CommandList,
 } from '@/components/ui/command';
+import { BackButton } from '@/components/shared/back-button';
 import { UserAvatar } from '@/components/shared/user-avatar';
 import { EmptyState } from '@/components/shared/empty-state';
 import { PaginationControls } from '@/components/shared/pagination';
@@ -223,20 +224,10 @@ function VersionDetailContent() {
     }
     setTaskCreating(true);
 
-    // Next task number for this project
-    const { data: maxTask } = await supabase
-      .from('tasks')
-      .select('number')
-      .eq('project_id', project.id)
-      .order('number', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    const nextNumber = ((maxTask as { number: number } | null)?.number ?? 0) + 1;
-
+    // number is assigned by the tasks_number_seq sequence
     const { data, error } = await supabase
       .from('tasks')
       .insert({
-        number: nextNumber,
         title: taskTitle.trim(),
         description: taskDescription.trim() || null,
         project_id: project.id,
@@ -274,7 +265,7 @@ function VersionDetailContent() {
           type: 'task_assigned',
           title: `New ${taskType} assigned: #${data.number}`,
           body: taskTitle.trim(),
-          link: `/app/tasks/${data.id}`,
+          link: `/app/tasks/${data.number}`,
           priority: taskPriority,
         });
       }
@@ -319,11 +310,7 @@ function VersionDetailContent() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3 animate-fade-in-up">
-        <Button variant="ghost" size="icon" asChild className="hover:scale-105 transition-transform duration-200">
-          <Link href={`/app/projects/${projectSlug}`}>
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
-        </Button>
+        <BackButton fallbackHref={`/app/projects/${projectSlug}`} />
         <div className="flex-1">
           <div className="flex items-center gap-2">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -683,7 +670,7 @@ function VersionDetailContent() {
           {pageItems.map((task) => (
             <Link
               key={task.id}
-              href={`/app/tasks/${task.id}`}
+              href={`/app/tasks/${task.number}`}
               className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-secondary/50 transition-all duration-200 border border-transparent hover:border-border hover:shadow-soft group row-hover"
             >
               <TypeBadge type={task.type} />

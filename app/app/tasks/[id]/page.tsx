@@ -4,7 +4,6 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
-  ArrowLeft,
   Trash2,
   Send,
   X,
@@ -50,6 +49,7 @@ import {
   CommandList,
 } from '@/components/ui/command';
 import { Check, ChevronsUpDown } from 'lucide-react';
+import { BackButton } from '@/components/shared/back-button';
 import { UserAvatar } from '@/components/shared/user-avatar';
 import { StatusBadge, TypeBadge, PriorityBadge } from '@/components/shared/badges';
 import { EmptyState } from '@/components/shared/empty-state';
@@ -68,7 +68,10 @@ export default function TaskDetailPage() {
   const params = useParams();
   const router = useRouter();
   const { user, profile } = useAuth();
-  const taskId = params.id as string;
+  const taskParam = params.id as string;
+  const isUuid = (v: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+
+  const [taskId, setTaskId] = useState('');
 
   const [task, setTask] = useState<Task | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
@@ -158,16 +161,17 @@ export default function TaskDetailPage() {
   const fetchTask = useCallback(async () => {
     if (!user) return;
 
-    const { data: taskData } = await supabase
+    const query = supabase
       .from('tasks')
-      .select('*, project:projects(*), version:versions(*), assignee:profiles!assignee_id(*), reporter:profiles!reporter_id(*)')
-      .eq('id', taskId)
-      .maybeSingle();
-
+      .select('*, project:projects(*), version:versions(*), assignee:profiles!assignee_id(*), reporter:profiles!reporter_id(*)');
+    const { data: taskData } = isUuid(taskParam)
+      ? await query.eq('id', taskParam).maybeSingle()
+      : await query.eq('number', parseInt(taskParam, 10)).maybeSingle();
     if (!taskData) {
       setLoading(false);
       return;
     }
+    setTaskId(taskData.id);
 
     const task = taskData as unknown as Task;
     setTask(task);
@@ -454,7 +458,7 @@ export default function TaskDetailPage() {
       const notifBase = {
         actor_id: user.id,
         project_id: task.project_id,
-        link: `/app/tasks/${taskId}`,
+        link: `/app/tasks/${task.number}`,
         priority: task.priority,
       };
 
@@ -562,7 +566,7 @@ export default function TaskDetailPage() {
             type: 'status_changed',
             title: `Status changed on #${task.number}`,
             body: `${task.status.replace('_', ' ')} → ${updates.status.replace('_', ' ')}`,
-            link: `/app/tasks/${taskId}`,
+            link: `/app/tasks/${task.number}`,
             priority: task.priority,
           });
           if (notifErr) throw notifErr;
@@ -572,7 +576,7 @@ export default function TaskDetailPage() {
               assignee.email,
               `Status changed on #${task.number}`,
               `${task.status.replace('_', ' ')} → ${updates.status.replace('_', ' ')}`,
-              `${window.location.origin}/app/tasks/${taskId}`
+              `${window.location.origin}/app/tasks/${task.number}`
             );
           }
         }
@@ -587,7 +591,7 @@ export default function TaskDetailPage() {
             type: 'task_assigned',
             title: `Task assigned: #${task.number}`,
             body: task.title,
-            link: `/app/tasks/${taskId}`,
+            link: `/app/tasks/${task.number}`,
             priority: updates.priority ?? task.priority,
           });
           if (notifErr) throw notifErr;
@@ -597,7 +601,7 @@ export default function TaskDetailPage() {
               newAssignee.email,
               `Task assigned: #${task.number}`,
               task.title,
-              `${window.location.origin}/app/tasks/${taskId}`
+              `${window.location.origin}/app/tasks/${task.number}`
             );
           }
         }
@@ -679,11 +683,7 @@ export default function TaskDetailPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3 animate-fade-in-up">
-        <Button variant="ghost" size="icon" asChild className="hover:scale-105 transition-transform duration-200">
-          <Link href={backHref}>
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
-        </Button>
+        <BackButton fallbackHref={backHref} />
         <div className="flex items-center gap-2 flex-1">
           <TypeBadge type={task.type} />
           <span className="text-sm text-muted-foreground">#{task.number}</span>

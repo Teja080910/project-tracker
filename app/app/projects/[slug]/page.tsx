@@ -4,7 +4,6 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
-  ArrowLeft,
   FolderKanban,
   Plus,
   Users,
@@ -43,6 +42,7 @@ import {
   DialogFooter,
   DialogClose,
 } from '@/components/ui/dialog';
+import { BackButton } from '@/components/shared/back-button';
 import { UserAvatar } from '@/components/shared/user-avatar';
 import { EmptyState } from '@/components/shared/empty-state';
 import { PaginationControls } from '@/components/shared/pagination';
@@ -333,11 +333,7 @@ export default function ProjectDetailPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3 animate-fade-in-up">
-        <Button variant="ghost" size="icon" asChild className="hover:scale-105 transition-transform duration-200">
-          <Link href="/app/projects">
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
-        </Button>
+        <BackButton fallbackHref="/app/projects" />
         <div className="flex-1">
           <div className="flex items-center gap-2">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -762,7 +758,10 @@ export default function ProjectDetailPage() {
               <div key={apk.id} className="flex items-center gap-3 px-3 py-2 rounded-md border border-border">
                 <Package className="h-5 w-5 text-muted-foreground shrink-0" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{apk.file_name}</p>
+                  <p className="text-sm font-medium truncate">
+                    <span className="text-xs text-muted-foreground font-mono mr-1.5">#{apk.number}</span>
+                    {apk.file_name}
+                  </p>
                   <p className="text-xs text-muted-foreground truncate">
                     {(apk.size_bytes / (1024 * 1024)).toFixed(1)} MB · {formatDate(apk.created_at)}
                     {apk.uploader ? ` · by ${apk.uploader.full_name ?? apk.uploader.email}` : ''}
