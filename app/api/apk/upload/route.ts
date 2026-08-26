@@ -133,10 +133,18 @@ export async function POST(req: NextRequest) {
   }
 
   const { data: urlData } = supabaseAdmin.storage.from(APK_BUCKET).getPublicUrl(storagePath);
+  const { data: projectRow } = await supabaseAdmin
+    .from('projects')
+    .select('slug')
+    .eq('id', projectId)
+    .maybeSingle();
 
   return NextResponse.json({
     apk: inserted,
     url: urlData.publicUrl,
+    shareUrl: projectRow
+      ? `${req.nextUrl.origin}/apk/${projectRow.slug}/${inserted.number}`
+      : urlData.publicUrl,
     message: 'APK uploaded successfully',
   });
 }
