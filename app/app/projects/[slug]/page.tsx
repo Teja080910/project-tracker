@@ -772,7 +772,7 @@ export default function ProjectDetailPage() {
                   size="sm"
                   className="h-8 text-xs shrink-0"
                   onClick={() => {
-                    navigator.clipboard.writeText(`${window.location.origin}/apk/${projectSlug}/${apk.number}`);
+                    navigator.clipboard.writeText(`${window.location.origin}/apk/${projectSlug}/${apk.number}/${encodeURIComponent(apk.file_name)}`);
                     toast.success('Download link copied');
                   }}
                 >

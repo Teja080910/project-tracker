@@ -143,7 +143,7 @@ export async function POST(req: NextRequest) {
     apk: inserted,
     url: urlData.publicUrl,
     shareUrl: projectRow
-      ? `${req.nextUrl.origin}/apk/${projectRow.slug}/${inserted.number}`
+      ? `${req.nextUrl.origin}/apk/${projectRow.slug}/${inserted.number}/${encodeURIComponent(inserted.file_name)}`
       : urlData.publicUrl,
     message: 'APK uploaded successfully',
   });
