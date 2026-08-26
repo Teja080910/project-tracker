@@ -1130,7 +1130,7 @@ export default function TaskDetailPage() {
                       variant="outline"
                       role="combobox"
                       aria-expanded={assigneeOpen}
-                      disabled={!canEdit && myRole !== 'developer'}
+                      disabled={!canEdit && !myRole}
                       className="w-full justify-between font-normal h-9"
                     >
                       {task.assignee
