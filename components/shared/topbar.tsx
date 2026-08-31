@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Search, Bell, Menu, LogOut, Command, User, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -41,6 +41,7 @@ export function Topbar() {
     users: { id: string; full_name: string | null; email: string }[];
   } | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
+  const blurTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -164,8 +165,8 @@ export function Topbar() {
           placeholder="Search projects, tasks, users..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          onFocus={() => setSearchOpen(true)}
-          onBlur={() => setTimeout(() => setSearchOpen(false), 150)}
+          onFocus={() => { if (blurTimeoutRef.current) { clearTimeout(blurTimeoutRef.current); blurTimeoutRef.current = null; } setSearchOpen(true); }}
+          onBlur={() => { blurTimeoutRef.current = setTimeout(() => setSearchOpen(false), 150); }}
           className="pl-9 h-9 bg-secondary/50 border-border/60 focus-visible:bg-card focus-visible:border-primary/30 transition-all duration-200"
         />
         <div className="absolute right-2.5 top-1/2 -translate-y-1/2 hidden sm:flex items-center gap-1 text-[10px] text-muted-foreground/50">
@@ -173,7 +174,10 @@ export function Topbar() {
           <span>K</span>
         </div>
         {searchOpen && searchResults && (searchResults.projects.length || searchResults.tasks.length || searchResults.users.length) > 0 && (
-          <div className="absolute top-full mt-1.5 w-full rounded-xl border border-border bg-popover shadow-elevated z-50 max-h-80 overflow-y-auto animate-fade-in-scale">
+          <div
+            className="absolute top-full mt-1.5 w-full rounded-xl border border-border bg-popover shadow-elevated z-50 max-h-80 overflow-y-auto animate-fade-in-scale"
+            onMouseDown={(e) => e.preventDefault()}
+          >
             {searchResults.projects.length > 0 && (
               <div className="p-1.5">
                 <p className="px-2 py-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Projects</p>
@@ -181,6 +185,7 @@ export function Topbar() {
                   <Link
                     key={p.id}
                     href={`/app/projects/${p.slug}`}
+                    onClick={() => { setSearchQuery(''); setSearchOpen(false); setSearchResults(null); }}
                     className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-lg hover:bg-accent transition-colors duration-150"
                   >
                     <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/10 text-primary">
@@ -200,6 +205,7 @@ export function Topbar() {
                   <Link
                     key={t.id}
                     href={`/app/tasks/${t.number}`}
+                    onClick={() => { setSearchQuery(''); setSearchOpen(false); setSearchResults(null); }}
                     className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-lg hover:bg-accent transition-colors duration-150"
                   >
                     <span className="text-[11px] font-mono text-muted-foreground">#{t.number}</span>
