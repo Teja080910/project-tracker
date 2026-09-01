@@ -79,6 +79,7 @@ export default function TaskDetailPage() {
   const [members, setMembers] = useState<Profile[]>([]);
   const [versions, setVersions] = useState<Version[]>([]);
   const [loading, setLoading] = useState(true);
+  const [accessDenied, setAccessDenied] = useState(false);
 
   const [newComment, setNewComment] = useState('');
   const [commentLoading, setCommentLoading] = useState(false);
@@ -171,6 +172,21 @@ export default function TaskDetailPage() {
       setLoading(false);
       return;
     }
+
+    if (profile?.role !== 'super_admin') {
+      const { data: membership } = await supabase
+        .from('project_members')
+        .select('id')
+        .eq('project_id', taskData.project_id)
+        .eq('user_id', user.id)
+        .maybeSingle();
+      if (!membership) {
+        setAccessDenied(true);
+        setLoading(false);
+        return;
+      }
+    }
+
     setTaskId(taskData.id);
 
     const task = taskData as unknown as Task;
@@ -221,7 +237,7 @@ export default function TaskDetailPage() {
     setMyRole((myMembership as { role: string } | null)?.role ?? null);
 
     setLoading(false);
-  }, [user, taskId]);
+  }, [user, taskId, profile]);
 
   useEffect(() => {
     fetchTask();
@@ -665,6 +681,17 @@ export default function TaskDetailPage() {
           <Skeleton className="h-96 lg:col-span-2" />
           <Skeleton className="h-64" />
         </div>
+      </div>
+    );
+  }
+
+  if (accessDenied) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-sm text-muted-foreground">You don&apos;t have access to this task. You must be a member of the project.</p>
+        <Button variant="outline" className="mt-4" asChild>
+          <Link href="/app/projects">Back to Projects</Link>
+        </Button>
       </div>
     );
   }
