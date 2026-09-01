@@ -61,18 +61,29 @@ export default function UsersPage() {
         .select('project_id')
         .eq('user_id', user?.id ?? '');
       const projectIds = memberships?.map((m) => m.project_id) ?? [];
-      if (projectIds.length === 0) {
-        setUsers([]);
-      } else {
+
+      const memberIds = new Set<string>();
+      if (projectIds.length > 0) {
         const { data: memberRows } = await supabase
           .from('project_members')
           .select('user_id')
           .in('project_id', projectIds);
-        const memberIds = [...new Set(memberRows?.map((m) => m.user_id) ?? [])];
+        memberRows?.forEach((m) => memberIds.add(m.user_id));
+      }
+
+      const { data: createdUsers } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('created_by', user?.id ?? '');
+      createdUsers?.forEach((u) => memberIds.add(u.id));
+
+      if (memberIds.size === 0) {
+        setUsers([]);
+      } else {
         const { data } = await supabase
           .from('profiles')
           .select('*')
-          .in('id', memberIds)
+          .in('id', [...memberIds])
           .order('created_at', { ascending: false });
         setUsers((data as Profile[]) ?? []);
       }
@@ -96,7 +107,11 @@ export default function UsersPage() {
   }, [page, totalPages]);
 
   if (!canManageUsers) {
-    return (
+  const availableRoles = isSuperAdmin
+    ? ROLES
+    : ROLES.filter((r) => r.value !== 'super_admin' && r.value !== 'project_admin');
+
+  return (
       <div className="text-center py-12">
         <Shield className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
         <p className="text-sm text-muted-foreground">You don&apos;t have permission to manage users.</p>
@@ -198,7 +213,7 @@ export default function UsersPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {ROLES.map((r) => (
+                    {availableRoles.map((r) => (
                       <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
                     ))}
                   </SelectContent>

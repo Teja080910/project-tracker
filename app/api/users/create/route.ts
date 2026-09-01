@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (data.user) {
-    await supabaseAdmin.from('profiles').update({ role: role || 'viewer', full_name }).eq('id', data.user.id);
+    await supabaseAdmin.from('profiles').update({ role: role || 'viewer', full_name, created_by: me.user.id }).eq('id', data.user.id);
   }
 
   return NextResponse.json({ user: data.user });
