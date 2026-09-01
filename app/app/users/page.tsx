@@ -48,13 +48,37 @@ export default function UsersPage() {
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 10;
 
-  const canManageUsers = profile?.role === 'super_admin' || profile?.role === 'project_admin';
+  const isSuperAdmin = profile?.role === 'super_admin';
+  const canManageUsers = isSuperAdmin || profile?.role === 'project_admin';
 
   const fetchUsers = useCallback(async () => {
-    const { data } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
-    setUsers((data as Profile[]) ?? []);
+    if (profile?.role === 'super_admin') {
+      const { data } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
+      setUsers((data as Profile[]) ?? []);
+    } else {
+      const { data: memberships } = await supabase
+        .from('project_members')
+        .select('project_id')
+        .eq('user_id', user?.id ?? '');
+      const projectIds = memberships?.map((m) => m.project_id) ?? [];
+      if (projectIds.length === 0) {
+        setUsers([]);
+      } else {
+        const { data: memberRows } = await supabase
+          .from('project_members')
+          .select('user_id')
+          .in('project_id', projectIds);
+        const memberIds = [...new Set(memberRows?.map((m) => m.user_id) ?? [])];
+        const { data } = await supabase
+          .from('profiles')
+          .select('*')
+          .in('id', memberIds)
+          .order('created_at', { ascending: false });
+        setUsers((data as Profile[]) ?? []);
+      }
+    }
     setLoading(false);
-  }, []);
+  }, [profile, user]);
 
   useEffect(() => {
     fetchUsers();
@@ -224,17 +248,21 @@ export default function UsersPage() {
                 <p className="text-xs text-muted-foreground truncate">{u.email}</p>
               </div>
               <div className="flex items-center gap-2">
-                <Select value={u.role} onValueChange={(v) => updateRole(u.id, v)} disabled={u.id === user?.id}>
-                  <SelectTrigger className="h-8 w-36 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {ROLES.map((r) => (
-                      <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {u.id !== user?.id && (
+                {isSuperAdmin ? (
+                  <Select value={u.role} onValueChange={(v) => updateRole(u.id, v)} disabled={u.id === user?.id}>
+                    <SelectTrigger className="h-8 w-36 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ROLES.map((r) => (
+                        <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Badge variant="outline" className="text-xs h-8 px-2 flex items-center">{getRoleLabel(u.role)}</Badge>
+                )}
+                {isSuperAdmin && u.id !== user?.id && (
                   <Button
                     variant="ghost"
                     size="sm"
