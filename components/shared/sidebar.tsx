@@ -26,13 +26,13 @@ const navItems = [
   { href: '/app/projects', label: 'Projects', icon: FolderKanban },
   { href: '/app/calendar', label: 'Calendar', icon: CalendarDays },
   { href: '/app/notifications', label: 'Notifications', icon: Bell },
-  { href: '/app/users', label: 'Users', icon: Users, superAdminOnly: true },
+  { href: '/app/users', label: 'Users', icon: Users, adminOnly: true },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
   const { profile } = useAuth();
-  const isSuperAdmin = profile?.role === 'super_admin';
+  const isAdmin = profile?.role === 'super_admin' || profile?.role === 'project_admin';
   const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
@@ -85,7 +85,7 @@ export function Sidebar() {
 
       <nav className="flex-1 px-2 py-3 space-y-0.5">
         {navItems
-          .filter((item) => !item.superAdminOnly || isSuperAdmin)
+          .filter((item) => !item.adminOnly || isAdmin)
           .map((item) => {
             const isActive =
               item.href === '/app'

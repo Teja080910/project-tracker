@@ -332,7 +332,7 @@ export function Topbar() {
 
 function MobileNav({ onNavigate }: { onNavigate: () => void }) {
   const { profile } = useAuth();
-  const isSuperAdmin = profile?.role === 'super_admin';
+  const isAdmin = profile?.role === 'super_admin' || profile?.role === 'project_admin';
   const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
@@ -369,7 +369,7 @@ function MobileNav({ onNavigate }: { onNavigate: () => void }) {
     { href: '/app/projects', label: 'Projects' },
     { href: '/app/calendar', label: 'Calendar' },
     { href: '/app/notifications', label: 'Notifications' },
-    ...(isSuperAdmin ? [{ href: '/app/users', label: 'Users' }] : []),
+    ...(isAdmin ? [{ href: '/app/users', label: 'Users' }] : []),
     { href: '/app/profile', label: 'Profile' },
     { href: '/app/settings', label: 'Settings' },
   ];

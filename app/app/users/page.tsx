@@ -48,7 +48,7 @@ export default function UsersPage() {
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 10;
 
-  const isSuperAdmin = profile?.role === 'super_admin';
+  const canManageUsers = profile?.role === 'super_admin' || profile?.role === 'project_admin';
 
   const fetchUsers = useCallback(async () => {
     const { data } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
@@ -71,7 +71,7 @@ export default function UsersPage() {
     if (page > totalPages) setPage(1);
   }, [page, totalPages]);
 
-  if (!isSuperAdmin) {
+  if (!canManageUsers) {
     return (
       <div className="text-center py-12">
         <Shield className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
@@ -112,16 +112,19 @@ export default function UsersPage() {
       return;
     }
     setCreating(true);
-    const { data, error } = await supabase.auth.admin.createUser({
-      email: newEmail,
-      password: newPassword,
-      user_metadata: { full_name: newName },
+    const { data: { session } } = await supabase.auth.getSession();
+    const res = await fetch('/api/users/create', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session?.access_token ?? ''}`,
+      },
+      body: JSON.stringify({ email: newEmail, password: newPassword, full_name: newName, role: newRole }),
     });
-    if (error) {
-      toast.error(error.message);
-      setCreating(false);
-    } else if (data.user) {
-      await supabase.from('profiles').update({ role: newRole, full_name: newName }).eq('id', data.user.id);
+    const json = await res.json();
+    if (!res.ok) {
+      toast.error(json.error || 'Failed to create user');
+    } else {
       toast.success('User created');
       setNewEmail('');
       setNewName('');
