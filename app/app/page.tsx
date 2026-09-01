@@ -47,9 +47,22 @@ export default function DashboardPage() {
   const fetchDashboard = useCallback(async () => {
     if (!user || !profile) return;
 
+    let memberProjectIds: string[] = [];
+    if (profile?.role !== 'super_admin') {
+      const { data: memberships } = await supabase
+        .from('project_members')
+        .select('project_id')
+        .eq('user_id', user.id);
+      memberProjectIds = memberships?.map((m) => m.project_id) ?? [];
+    }
+
     const [projectsRes, activeProjectsRes, myProjectsRes] = await Promise.all([
-      supabase.from('projects').select('id', { count: 'exact', head: true }),
-      supabase.from('projects').select('id', { count: 'exact', head: true }).eq('status', 'active'),
+      profile?.role === 'super_admin'
+        ? supabase.from('projects').select('id', { count: 'exact', head: true })
+        : supabase.from('projects').select('id', { count: 'exact', head: true }).in('id', memberProjectIds),
+      profile?.role === 'super_admin'
+        ? supabase.from('projects').select('id', { count: 'exact', head: true }).eq('status', 'active')
+        : supabase.from('projects').select('id', { count: 'exact', head: true }).eq('status', 'active').in('id', memberProjectIds),
       profile?.role === 'super_admin'
         ? supabase.from('projects').select('*').order('created_at', { ascending: false }).limit(5)
         : supabase
