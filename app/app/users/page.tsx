@@ -106,12 +106,12 @@ export default function UsersPage() {
     if (page > totalPages) setPage(1);
   }, [page, totalPages]);
 
-  if (!canManageUsers) {
   const availableRoles = isSuperAdmin
     ? ROLES
     : ROLES.filter((r) => r.value !== 'super_admin' && r.value !== 'project_admin');
 
-  return (
+  if (!canManageUsers) {
+    return (
       <div className="text-center py-12">
         <Shield className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
         <p className="text-sm text-muted-foreground">You don&apos;t have permission to manage users.</p>
