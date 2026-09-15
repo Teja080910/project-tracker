@@ -9,7 +9,7 @@ import { GithubIdPrompt } from '@/components/shared/github-id-prompt';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
+  const { user, profile, loading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -17,7 +17,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     if (!loading && !user) {
       router.replace(`/login?redirect=${encodeURIComponent(pathname)}`);
     }
-  }, [loading, user, router, pathname]);
+    if (!loading && user && profile?.disabled) {
+      router.replace('/login?disabled=true');
+    }
+  }, [loading, user, profile, router, pathname]);
 
   if (loading) {
     return (
@@ -40,6 +43,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }
 
   if (!user) return null;
+
+  if (profile?.disabled) return null;
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">

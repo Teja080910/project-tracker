@@ -17,11 +17,15 @@ export async function POST(req: NextRequest) {
 
   const { data: profile } = await supabaseAdmin
     .from('profiles')
-    .select('role')
+    .select('role, disabled')
     .eq('id', me.user.id)
     .maybeSingle();
 
-  if (!profile || (profile.role !== 'super_admin' && profile.role !== 'project_admin')) {
+  if (!profile || profile.disabled) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  }
+
+  if (profile.role !== 'super_admin' && profile.role !== 'project_admin') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 

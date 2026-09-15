@@ -19,8 +19,17 @@ function CallbackContent() {
   const redirectTo = searchParams.get('redirect');
 
   useEffect(() => {
-    supabase.auth.onAuthStateChange((event, session) => {
+    supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data: profile } = await supabase.from('profiles').select('disabled').eq('id', user.id).maybeSingle();
+          if (profile?.disabled) {
+            await supabase.auth.signOut();
+            router.replace('/login?disabled=true');
+            return;
+          }
+        }
         router.push(redirectTo || '/app');
       }
     });

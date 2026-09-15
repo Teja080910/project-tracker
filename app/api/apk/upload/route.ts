@@ -35,10 +35,10 @@ async function authenticate(req: NextRequest): Promise<string | null> {
 async function canUpload(userId: string, projectId: string): Promise<boolean> {
   const { data: profile } = await supabaseAdmin
     .from('profiles')
-    .select('role')
+    .select('role, disabled')
     .eq('id', userId)
     .maybeSingle();
-  if (!profile) return false;
+  if (!profile || profile.disabled) return false;
   if ((profile.role as string) === 'super_admin') return true;
 
   const { data: project } = await supabaseAdmin

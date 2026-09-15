@@ -31,7 +31,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const fetchProfile = async (uid: string) => {
     const { data } = await supabase.from('profiles').select('*').eq('id', uid).maybeSingle();
-    setProfile(data as Profile | null);
+    const profile = data as Profile | null;
+    if (profile?.disabled) {
+      await supabase.auth.signOut();
+      setSession(null);
+      setUser(null);
+      setProfile(null);
+      setLoading(false);
+      return;
+    }
+    setProfile(profile);
   };
 
   useEffect(() => {
@@ -77,11 +86,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
-        fetchProfile(session.user.id);
+        fetchProfile(session.user.id).finally(() => mounted && setLoading(false));
       } else {
         setProfile(null);
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     return () => {

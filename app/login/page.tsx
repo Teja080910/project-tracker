@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { Loader2, ArrowRight, Mail, Lock, Eye, EyeOff } from 'lucide-react';
+import { Loader2, ArrowRight, Mail, Lock, Eye, EyeOff, AlertTriangle } from 'lucide-react';
 
 function GoogleIcon() {
   return (
@@ -33,6 +33,7 @@ function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get('redirect');
+  const isDisabled = searchParams.get('disabled') === 'true';
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -67,6 +68,16 @@ function LoginContent() {
       toast.error(error.message);
       setLoading(false);
     } else {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: profile } = await supabase.from('profiles').select('disabled').eq('id', user.id).maybeSingle();
+        if (profile?.disabled) {
+          await supabase.auth.signOut();
+          router.replace('/login?disabled=true');
+          setLoading(false);
+          return;
+        }
+      }
       router.push(redirectTo || '/app');
     }
   };
@@ -99,6 +110,15 @@ function LoginContent() {
 
         {/* Form Card */}
         <div className="rounded-2xl border border-border/60 bg-card/70 backdrop-blur-xl shadow-elevated p-6 space-y-5 animate-fade-in-up stagger-1">
+          {isDisabled && (
+            <div className="flex items-start gap-3 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm">
+              <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
+              <div>
+                <p className="font-medium text-red-500">Account Disabled</p>
+                <p className="text-muted-foreground text-xs mt-0.5">Your account has been disabled. Please contact an administrator.</p>
+              </div>
+            </div>
+          )}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email" className="text-sm font-medium">Email</Label>
