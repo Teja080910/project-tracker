@@ -6,6 +6,7 @@ import { useAuth } from '@/lib/auth-context';
 import { Sidebar } from '@/components/shared/sidebar';
 import { Topbar } from '@/components/shared/topbar';
 import { GithubIdPrompt } from '@/components/shared/github-id-prompt';
+import { PushPrompt } from '@/components/shared/push-prompt';
 import { Skeleton } from '@/components/ui/skeleton';
 import { APP_NAME } from '@/lib/app-config';
 import { ensureServiceWorker } from '@/lib/push';
@@ -75,6 +76,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <Topbar />
         <main className="flex-1 overflow-y-auto dashboard-bg">
           <div className="container max-w-6xl mx-auto px-4 md:px-6 py-6 animate-fade-in">
+            <PushPrompt />
             {children}
           </div>
         </main>
