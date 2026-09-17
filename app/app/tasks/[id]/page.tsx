@@ -96,7 +96,6 @@ export default function TaskDetailPage() {
   const [editMentionOpen, setEditMentionOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editTitle, setEditTitle] = useState('');
-  const [editDescription, setEditDescription] = useState('');
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editingCommentText, setEditingCommentText] = useState('');
   const [commentEditLoading, setCommentEditLoading] = useState(false);
@@ -107,12 +106,12 @@ export default function TaskDetailPage() {
   const [showAllActivity, setShowAllActivity] = useState(false);
   const [assigneeOpen, setAssigneeOpen] = useState(false);
   const ACTIVITY_PAGE_SIZE = 10;
-  const ACTIVITY_PREVIEW_COUNT = 5;
+  const ACTIVITY_PREVIEW_COUNT = 1;
 
   const commentImageInputRef = useRef<HTMLInputElement>(null);
   const commentTextareaRef = useRef<HTMLTextAreaElement>(null);
   const editCommentTextareaRef = useRef<HTMLTextAreaElement>(null);
-  const chatEndRef = useRef<HTMLDivElement>(null);
+  const commentsListRef = useRef<HTMLDivElement>(null);
   const activityCardRef = useRef<HTMLDivElement>(null);
   const chatCardRef = useRef<HTMLDivElement>(null);
   const [chatHeight, setChatHeight] = useState(420);
@@ -144,20 +143,11 @@ export default function TaskDetailPage() {
     };
   }, [loading]);
 
+  // Keep the comment list scrolled to the latest message (scrolls only the list, never the page)
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const el = commentsListRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
   }, [comments.length]);
-
-  // Scroll the comment input into view on page load/refresh
-  useEffect(() => {
-    if (!loading && task) {
-      // small delay so the layout is fully settled after data fetch
-      const t = setTimeout(() => {
-        commentTextareaRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }, 300);
-      return () => clearTimeout(t);
-    }
-  }, [loading, task]);
 
   const fetchTask = useCallback(async () => {
     if (!user) return;
@@ -192,7 +182,6 @@ export default function TaskDetailPage() {
     const task = taskData as unknown as Task;
     setTask(task);
     setEditTitle(task.title);
-    setEditDescription(task.description ?? '');
 
     const [commentsRes, activityRes, membersRes, versionsRes, ownerRes] = await Promise.all([
       supabase
@@ -638,7 +627,7 @@ export default function TaskDetailPage() {
   };
 
   const saveEdit = async () => {
-    await updateTask({ title: editTitle, description: editDescription || null });
+    await updateTask({ title: editTitle });
     setEditing(false);
     toast.success('Task updated');
   };
@@ -737,7 +726,7 @@ export default function TaskDetailPage() {
       <div className="grid lg:grid-cols-3 gap-6">
         {/* Main content */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Title & description */}
+          {/* Title */}
           <Card className="card-hover animate-fade-in-up stagger-1">
             <CardContent className="p-6">
               {editing ? (
@@ -747,35 +736,22 @@ export default function TaskDetailPage() {
                     onChange={(e) => setEditTitle(e.target.value)}
                     className="text-lg font-semibold"
                   />
-                  <Textarea
-                    value={editDescription}
-                    onChange={(e) => setEditDescription(e.target.value)}
-                    rows={6}
-                    placeholder="Add a description..."
-                  />
                   <div className="flex gap-2">
                     <Button size="sm" onClick={saveEdit}>Save</Button>
-                    <Button size="sm" variant="outline" onClick={() => { setEditing(false); setEditTitle(task.title); setEditDescription(task.description ?? ''); }}>
+                    <Button size="sm" variant="outline" onClick={() => { setEditing(false); setEditTitle(task.title); }}>
                       Cancel
                     </Button>
                   </div>
                 </div>
               ) : (
-                <>
-                  <div className="flex items-start justify-between gap-4">
-                    <h1 className="text-xl font-semibold tracking-tight flex-1">{task.title}</h1>
-                    {canEdit && (
-                      <Button variant="ghost" size="sm" onClick={() => setEditing(true)}>
-                        Edit
-                      </Button>
-                    )}
-                  </div>
-                  {task.description ? (
-                    <p className="text-sm text-muted-foreground mt-3 whitespace-pre-wrap">{task.description}</p>
-                  ) : (
-                    <p className="text-sm text-muted-foreground mt-3 italic">No description provided.</p>
+                <div className="flex items-start justify-between gap-4">
+                  <h1 className="text-xl font-semibold tracking-tight flex-1">{task.title}</h1>
+                  {canEdit && (
+                    <Button variant="ghost" size="sm" onClick={() => setEditing(true)}>
+                      Edit
+                    </Button>
                   )}
-                </>
+                </div>
               )}
             </CardContent>
           </Card>
@@ -799,7 +775,7 @@ export default function TaskDetailPage() {
                   <EmptyState icon={MessageSquare} title="No comments yet" description="Start the conversation" />
                 </div>
               ) : (
-                <div className="flex-1 overflow-y-auto px-4 pt-3 space-y-3 min-h-0">
+                <div ref={commentsListRef} className="flex-1 overflow-y-auto px-4 pt-3 space-y-3 min-h-0">
                   {comments.map((comment) => {
                     const isMine = comment.user_id === user?.id;
                     const isEditingThis = editingCommentId === comment.id;
@@ -947,7 +923,6 @@ export default function TaskDetailPage() {
                       </div>
                     );
                   })}
-                  <div ref={chatEndRef} />
                 </div>
               )}
 
@@ -1289,7 +1264,7 @@ export default function TaskDetailPage() {
                   className="h-7 text-xs"
                   onClick={() => setShowAllActivity((s) => !s)}
                 >
-                  {showAllActivity ? 'Show less' : `View all (${activityLogs.length})`}
+                  {showAllActivity ? 'Show less' : `More (${activityLogs.length})`}
                 </Button>
               )}
             </CardHeader>

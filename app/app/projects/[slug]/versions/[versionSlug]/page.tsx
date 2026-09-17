@@ -102,7 +102,7 @@ function VersionDetailContent() {
   // New task modal state
   const [taskModalOpen, setTaskModalOpen] = useState(false);
   const [taskTitle, setTaskTitle] = useState('');
-  const [taskDescription, setTaskDescription] = useState('');
+  const [taskComment, setTaskComment] = useState('');
   const [taskType, setTaskType] = useState('task');
   const [taskPriority, setTaskPriority] = useState('medium');
   const [taskAssigneeId, setTaskAssigneeId] = useState('none');
@@ -229,7 +229,6 @@ function VersionDetailContent() {
       .from('tasks')
       .insert({
         title: taskTitle.trim(),
-        description: taskDescription.trim() || null,
         project_id: project.id,
         version_id: version.id,
         type: taskType,
@@ -248,6 +247,15 @@ function VersionDetailContent() {
     }
 
     try {
+      const commentText = taskComment.trim();
+      if (commentText) {
+        await supabase.from('comments').insert({
+          task_id: data.id,
+          user_id: user.id,
+          message: commentText,
+        });
+      }
+
       await supabase.from('activity_logs').insert({
         project_id: project.id,
         task_id: data.id,
@@ -272,7 +280,7 @@ function VersionDetailContent() {
 
       setTaskModalOpen(false);
       setTaskTitle('');
-      setTaskDescription('');
+      setTaskComment('');
       setTaskType('task');
       setTaskPriority('medium');
       setTaskAssigneeId('none');
@@ -367,12 +375,12 @@ function VersionDetailContent() {
               />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">Description</label>
+              <label className="text-sm font-medium">Comment</label>
               <Textarea
-                value={taskDescription}
-                onChange={(e) => setTaskDescription(e.target.value)}
+                value={taskComment}
+                onChange={(e) => setTaskComment(e.target.value)}
                 rows={3}
-                placeholder="Describe the task in detail..."
+                placeholder="Add a comment... (optional)"
               />
             </div>
             <div className="grid grid-cols-2 gap-4">
