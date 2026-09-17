@@ -4,6 +4,7 @@ import { Inter } from 'next/font/google';
 import { ThemeProvider } from '@/lib/theme-provider';
 import { AuthProvider } from '@/lib/auth-context';
 import { Toaster } from '@/components/ui/sonner';
+import { TooltipProvider } from '@/components/ui/tooltip';
 import { APP_NAME, APP_URL, APP_LOGO_URL } from '@/lib/app-config';
 
 const inter = Inter({ subsets: ['latin'], variable: '--font-sans' });
@@ -27,8 +28,10 @@ export default function RootLayout({
       <body className={`${inter.variable} font-sans antialiased`}>
         <ThemeProvider>
           <AuthProvider>
-            {children}
-            <Toaster position="top-center" />
+            <TooltipProvider delayDuration={200}>
+              {children}
+              <Toaster position="top-center" />
+            </TooltipProvider>
           </AuthProvider>
         </ThemeProvider>
       </body>

@@ -51,6 +51,7 @@ import {
 import { Check, ChevronsUpDown } from 'lucide-react';
 import { BackButton } from '@/components/shared/back-button';
 import { UserAvatar } from '@/components/shared/user-avatar';
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { StatusBadge, TypeBadge, PriorityBadge } from '@/components/shared/badges';
 import { EmptyState } from '@/components/shared/empty-state';
 import { PaginationControls } from '@/components/shared/pagination';
@@ -784,7 +785,16 @@ export default function TaskDetailPage() {
                     const isEditingThis = editingCommentId === comment.id;
                     return (
                       <div key={comment.id} className={`flex gap-2.5 ${isMine ? 'flex-row-reverse' : ''}`}>
-                        <UserAvatar profile={comment.profile} className="h-7 w-7 shrink-0 mt-0.5" />
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="shrink-0 mt-0.5 cursor-default">
+                              <UserAvatar profile={comment.profile} className="h-7 w-7" />
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            {comment.profile?.full_name ?? comment.profile?.email ?? 'Unknown user'}
+                          </TooltipContent>
+                        </Tooltip>
                         <div className={`max-w-[75%] min-w-0 ${isMine ? 'items-end' : 'items-start'} flex flex-col`}>
                           <div
                             className={`rounded-2xl px-3.5 py-2.5 text-sm break-words whitespace-pre-wrap ${
