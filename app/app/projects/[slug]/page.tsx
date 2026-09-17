@@ -50,6 +50,7 @@ import { ConfirmDeleteDialog } from '@/components/shared/confirm-delete-dialog';
 import { supabase } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth-context';
 import { sendNotificationEmail } from '@/lib/email-client';
+import { sendPushToUser } from '@/lib/push';
 import { getProjectStatusMeta, getRoleLabel, getVersionStatusMeta } from '@/lib/constants';
 import { formatDate, cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -208,6 +209,12 @@ export default function ProjectDetailPage() {
           `${window.location.origin}/app/projects/${projectSlug}`
         );
       }
+      sendPushToUser(
+        newMemberId,
+        `You were added to ${project?.name}`,
+        `Role: ${getRoleLabel(newMemberRole)}`,
+        `/app/projects/${projectSlug}`
+      );
       setNewMemberId('');
       setAddMemberOpen(false);
       await fetchProject();

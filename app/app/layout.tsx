@@ -8,6 +8,7 @@ import { Topbar } from '@/components/shared/topbar';
 import { GithubIdPrompt } from '@/components/shared/github-id-prompt';
 import { Skeleton } from '@/components/ui/skeleton';
 import { APP_NAME } from '@/lib/app-config';
+import { ensureServiceWorker } from '@/lib/push';
 
 const PAGE_TITLES: Record<string, string> = {
   projects: 'Projects',
@@ -29,6 +30,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     const label = PAGE_TITLES[segment] ?? 'Dashboard';
     document.title = `${label} · ${APP_NAME}`;
   }, [pathname]);
+
+  useEffect(() => {
+    ensureServiceWorker();
+  }, []);
 
   useEffect(() => {
     if (!loading && !user) {

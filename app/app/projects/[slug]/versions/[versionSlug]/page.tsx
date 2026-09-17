@@ -47,6 +47,7 @@ import { DatePicker } from '@/components/shared/date-picker';
 import { StatusBadge, TypeBadge, PriorityBadge } from '@/components/shared/badges';
 import { supabase } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth-context';
+import { sendPushToUser } from '@/lib/push';
 import { getVersionStatusMeta, TASK_STATUSES, TASK_TYPES, TASK_PRIORITIES } from '@/lib/constants';
 import { formatDate, cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -276,6 +277,12 @@ function VersionDetailContent() {
           link: `/app/tasks/${data.number}`,
           priority: taskPriority,
         });
+        sendPushToUser(
+          taskAssigneeId,
+          `New ${taskType} assigned: #${data.number}`,
+          taskTitle.trim(),
+          `/app/tasks/${data.number}`
+        );
       }
 
       setTaskModalOpen(false);

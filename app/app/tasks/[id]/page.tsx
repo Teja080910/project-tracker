@@ -60,6 +60,7 @@ import { DatePicker } from '@/components/shared/date-picker';
 import { supabase } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth-context';
 import { sendNotificationEmail } from '@/lib/email-client';
+import { sendPushToUser } from '@/lib/push';
 import { TASK_TYPES, TASK_STATUSES, TASK_PRIORITIES, getRoleLabel } from '@/lib/constants';
 import { formatDate, formatRelativeTime, cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -491,6 +492,12 @@ export default function TaskDetailPage() {
           commentText.slice(0, 200) || 'Sent an image',
           `${window.location.origin}${notifBase.link}`
         );
+        sendPushToUser(
+          m.id,
+          `${profile?.full_name ?? profile?.email} mentioned you in #${task.number}`,
+          commentText.slice(0, 100) || 'Sent an image',
+          notifBase.link
+        );
       }
 
       // Notify assignee (if not already mentioned)
@@ -512,6 +519,12 @@ export default function TaskDetailPage() {
             `${window.location.origin}${notifBase.link}`
           );
         }
+        sendPushToUser(
+          task.assignee_id,
+          `New comment on #${task.number}`,
+          commentText.slice(0, 100) || 'Sent an image',
+          notifBase.link
+        );
       }
 
       setNewComment('');
@@ -588,6 +601,12 @@ export default function TaskDetailPage() {
               `${window.location.origin}/app/tasks/${task.number}`
             );
           }
+          sendPushToUser(
+            task.assignee_id,
+            `Status changed on #${task.number}`,
+            `${task.status.replace('_', ' ')} → ${updates.status.replace('_', ' ')}`,
+            `/app/tasks/${task.number}`
+          );
         }
       }
       if (updates.assignee_id !== undefined && updates.assignee_id !== task.assignee_id) {
@@ -613,6 +632,12 @@ export default function TaskDetailPage() {
               `${window.location.origin}/app/tasks/${task.number}`
             );
           }
+          sendPushToUser(
+            newAssigneeId,
+            `Task assigned: #${task.number}`,
+            task.title,
+            `/app/tasks/${task.number}`
+          );
         }
         const { error: logErr } = await supabase.from('activity_logs').insert({
           project_id: task.project_id,
