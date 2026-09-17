@@ -272,14 +272,14 @@ function VersionDetailContent() {
           actor_id: user.id,
           project_id: project.id,
           type: 'task_assigned',
-          title: `New ${taskType} assigned: #${data.number}`,
+          title: `New ${taskType} assigned: #${data.number} · ${project.name}`,
           body: taskTitle.trim(),
           link: `/app/tasks/${data.number}`,
           priority: taskPriority,
         });
         sendPushToUser(
           taskAssigneeId,
-          `New ${taskType} assigned: #${data.number}`,
+          `New ${taskType} assigned: #${data.number} · ${project.name}`,
           taskTitle.trim(),
           `/app/tasks/${data.number}`
         );

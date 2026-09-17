@@ -465,6 +465,7 @@ export default function TaskDetailPage() {
       if (logErr) throw logErr;
 
       const commentText = newComment.trim();
+      const projectSuffix = task.project?.name ? ` · ${task.project.name}` : '';
       const notifBase = {
         actor_id: user.id,
         project_id: task.project_id,
@@ -482,19 +483,19 @@ export default function TaskDetailPage() {
           ...notifBase,
           user_id: m.id,
           type: 'mention',
-          title: `${profile?.full_name ?? profile?.email} mentioned you in #${task.number}`,
+          title: `${profile?.full_name ?? profile?.email} mentioned you in #${task.number}${projectSuffix}`,
           body: commentText.slice(0, 100) || 'Sent an image',
         });
         if (notifErr) throw notifErr;
         sendNotificationEmail(
           m.email,
-          `${profile?.full_name ?? profile?.email} mentioned you in #${task.number}`,
+          `${profile?.full_name ?? profile?.email} mentioned you in #${task.number}${projectSuffix}`,
           commentText.slice(0, 200) || 'Sent an image',
           `${window.location.origin}${notifBase.link}`
         );
         sendPushToUser(
           m.id,
-          `${profile?.full_name ?? profile?.email} mentioned you in #${task.number}`,
+          `${profile?.full_name ?? profile?.email} mentioned you in #${task.number}${projectSuffix}`,
           commentText.slice(0, 100) || 'Sent an image',
           notifBase.link
         );
@@ -506,7 +507,7 @@ export default function TaskDetailPage() {
           ...notifBase,
           user_id: task.assignee_id,
           type: 'comment_added',
-          title: `New comment on #${task.number}`,
+          title: `New comment on #${task.number}${projectSuffix}`,
           body: commentText.slice(0, 100) || 'Sent an image',
         });
         if (notifErr) throw notifErr;
@@ -514,14 +515,14 @@ export default function TaskDetailPage() {
         if (assignee) {
           sendNotificationEmail(
             assignee.email,
-            `New comment on #${task.number}`,
+            `New comment on #${task.number}${projectSuffix}`,
             commentText.slice(0, 200) || 'Sent an image',
             `${window.location.origin}${notifBase.link}`
           );
         }
         sendPushToUser(
           task.assignee_id,
-          `New comment on #${task.number}`,
+          `New comment on #${task.number}${projectSuffix}`,
           commentText.slice(0, 100) || 'Sent an image',
           notifBase.link
         );
@@ -562,6 +563,7 @@ export default function TaskDetailPage() {
 
   const updateTask = async (updates: Partial<Task>) => {
     if (!task || !user) return;
+    const projectSuffix = task.project?.name ? ` · ${task.project.name}` : '';
     const { error } = await supabase.from('tasks').update(updates).eq('id', taskId);
     if (error) {
       toast.error(error.message);
@@ -586,7 +588,7 @@ export default function TaskDetailPage() {
             actor_id: user.id,
             project_id: task.project_id,
             type: 'status_changed',
-            title: `Status changed on #${task.number}`,
+            title: `Status changed on #${task.number}${projectSuffix}`,
             body: `${task.status.replace('_', ' ')} → ${updates.status.replace('_', ' ')}`,
             link: `/app/tasks/${task.number}`,
             priority: task.priority,
@@ -596,14 +598,14 @@ export default function TaskDetailPage() {
           if (assignee) {
             sendNotificationEmail(
               assignee.email,
-              `Status changed on #${task.number}`,
+              `Status changed on #${task.number}${projectSuffix}`,
               `${task.status.replace('_', ' ')} → ${updates.status.replace('_', ' ')}`,
               `${window.location.origin}/app/tasks/${task.number}`
             );
           }
           sendPushToUser(
             task.assignee_id,
-            `Status changed on #${task.number}`,
+            `Status changed on #${task.number}${projectSuffix}`,
             `${task.status.replace('_', ' ')} → ${updates.status.replace('_', ' ')}`,
             `/app/tasks/${task.number}`
           );
@@ -617,7 +619,7 @@ export default function TaskDetailPage() {
             actor_id: user.id,
             project_id: task.project_id,
             type: 'task_assigned',
-            title: `Task assigned: #${task.number}`,
+            title: `Task assigned: #${task.number}${projectSuffix}`,
             body: task.title,
             link: `/app/tasks/${task.number}`,
             priority: updates.priority ?? task.priority,
@@ -627,14 +629,14 @@ export default function TaskDetailPage() {
           if (newAssignee) {
             sendNotificationEmail(
               newAssignee.email,
-              `Task assigned: #${task.number}`,
+              `Task assigned: #${task.number}${projectSuffix}`,
               task.title,
               `${window.location.origin}/app/tasks/${task.number}`
             );
           }
           sendPushToUser(
             newAssigneeId,
-            `Task assigned: #${task.number}`,
+            `Task assigned: #${task.number}${projectSuffix}`,
             task.title,
             `/app/tasks/${task.number}`
           );
