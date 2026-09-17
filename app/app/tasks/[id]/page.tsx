@@ -269,6 +269,9 @@ export default function TaskDetailPage() {
   const isImageType = (t: string | null) => !!t && t.startsWith('image/');
   const isVideoType = (t: string | null) => !!t && t.startsWith('video/');
   const isPdfType = (t: string | null) => t === 'application/pdf';
+  const isMarkdownType = (t: string | null, name?: string | null) =>
+    (!!t && (t === 'text/markdown' || t === 'text/x-markdown' || t === 'application/markdown')) ||
+    (!!name && /\.(md|markdown)$/i.test(name));
 
   // --- @mention support ---
   const mentionCandidates = members.filter((m) => {
@@ -416,13 +419,13 @@ export default function TaskDetailPage() {
     if (commentImage) {
       setImageUploading(true);
       const ext = commentImage.name.split('.').pop() ?? 'png';
-      fileType = commentImage.type;
+      fileType = commentImage.type || (isMarkdownType(null, commentImage.name) ? 'text/markdown' : null);
       fileName = commentImage.name;
       const storageName = `${task.project_id}/${taskId}/comments/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
       const { error: uploadError } = await supabase.storage
         .from('task-screenshots')
         .upload(storageName, commentImage, {
-          contentType: fileType,
+          contentType: fileType ?? undefined,
           cacheControl: '3600',
         });
       setImageUploading(false);
@@ -820,6 +823,20 @@ export default function TaskDetailPage() {
                                 </span>
                               </button>
                             )}
+                            {comment.image_path && !isImageType(comment.file_type) && !isVideoType(comment.file_type) && !isPdfType(comment.file_type) && (
+                              <a
+                                href={getImageUrl(comment.image_path)}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-2 rounded-lg border border-border/60 bg-card/50 px-3 py-2 mb-2 w-full text-left hover:bg-accent/50 transition-colors"
+                              >
+                                <FileIcon className="h-6 w-6 text-primary shrink-0" />
+                                <span className="flex flex-col min-w-0">
+                                  <span className="text-sm font-medium truncate">{comment.file_name ?? 'Attachment'}</span>
+                                  <span className="text-[11px] text-muted-foreground">Click to download</span>
+                                </span>
+                              </a>
+                            )}
                             {comment.image_path && !comment.file_type && (
                               <img
                                 src={getImageUrl(comment.image_path)}
@@ -1004,14 +1021,18 @@ export default function TaskDetailPage() {
                       <input
                         ref={commentImageInputRef}
                         type="file"
-                        accept="image/*,video/*,application/pdf"
+                        accept="image/*,video/*,application/pdf,.md,.markdown,text/markdown"
                         className="hidden"
                         onChange={(e) => {
                           const f = e.target.files?.[0];
                           if (f) {
-                            const ok = f.type.startsWith('image/') || f.type.startsWith('video/') || f.type === 'application/pdf';
+                            const ok =
+                              f.type.startsWith('image/') ||
+                              f.type.startsWith('video/') ||
+                              f.type === 'application/pdf' ||
+                              isMarkdownType(f.type, f.name);
                             if (!ok) {
-                              toast.error('Only images, videos and PDF files are allowed');
+                              toast.error('Only images, videos, PDF and Markdown (.md) files are allowed');
                               return;
                             }
                             if (f.size > 50 * 1024 * 1024) {
