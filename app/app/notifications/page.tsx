@@ -274,16 +274,17 @@ function NotificationsContent() {
                 </div>
                 <div className="flex items-center gap-1">
                   {n.link && (
-                    <Link
-                      href={n.link}
-                      onClick={() => {
-                        if (!n.read) markRead(n.id);
-                      }}
-                    >
-                      <Button variant="ghost" size="sm" className="h-8 text-xs">
+                    <Button asChild variant="ghost" size="sm" className="h-8 text-xs">
+                      <Link
+                        href={n.link}
+                        onClick={(e) => {
+                          if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+                          if (!n.read) markRead(n.id);
+                        }}
+                      >
                         View
-                      </Button>
-                    </Link>
+                      </Link>
+                    </Button>
                   )}
                   {!n.read && (
                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => markRead(n.id)}>

@@ -7,11 +7,28 @@ import { Sidebar } from '@/components/shared/sidebar';
 import { Topbar } from '@/components/shared/topbar';
 import { GithubIdPrompt } from '@/components/shared/github-id-prompt';
 import { Skeleton } from '@/components/ui/skeleton';
+import { APP_NAME } from '@/lib/app-config';
+
+const PAGE_TITLES: Record<string, string> = {
+  projects: 'Projects',
+  tasks: 'Task',
+  calendar: 'Calendar',
+  notifications: 'Notifications',
+  users: 'Users',
+  profile: 'Profile',
+  settings: 'Settings',
+};
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, profile, loading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+
+  useEffect(() => {
+    const segment = pathname.split('/').filter(Boolean)[1] ?? '';
+    const label = PAGE_TITLES[segment] ?? 'Dashboard';
+    document.title = `${label} · ${APP_NAME}`;
+  }, [pathname]);
 
   useEffect(() => {
     if (!loading && !user) {
