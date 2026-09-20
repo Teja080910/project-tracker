@@ -48,7 +48,7 @@ import {
   CommandItem,
   CommandList,
 } from '@/components/ui/command';
-import { Check, ChevronsUpDown } from 'lucide-react';
+import { Check, ChevronsUpDown, SmilePlus } from 'lucide-react';
 import { BackButton } from '@/components/shared/back-button';
 import { UserAvatar } from '@/components/shared/user-avatar';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
@@ -64,7 +64,9 @@ import { sendPushToUser } from '@/lib/push';
 import { TASK_TYPES, TASK_STATUSES, TASK_PRIORITIES, getRoleLabel } from '@/lib/constants';
 import { formatDate, formatRelativeTime, cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import type { Task, Comment, ActivityLog, Profile, Version, Project } from '@/lib/types';
+import type { Task, Comment, CommentReaction, ActivityLog, Profile, Version, Project } from '@/lib/types';
+
+const REACTION_EMOJIS = ['👍', '❤️', '😂', '🎉', '👀', '🙏'];
 
 export default function TaskDetailPage() {
   const params = useParams();
@@ -77,6 +79,8 @@ export default function TaskDetailPage() {
 
   const [task, setTask] = useState<Task | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
+  const [reactions, setReactions] = useState<CommentReaction[]>([]);
+  const [reactionPickerFor, setReactionPickerFor] = useState<string | null>(null);
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [members, setMembers] = useState<Profile[]>([]);
   const [versions, setVersions] = useState<Version[]>([]);
@@ -205,7 +209,18 @@ export default function TaskDetailPage() {
       supabase.from('profiles').select('*').eq('id', task.project?.owner_id ?? '').maybeSingle(),
     ]);
 
-    setComments((commentsRes.data as unknown as Comment[]) ?? []);
+    const commentRows = (commentsRes.data as unknown as Comment[]) ?? [];
+    setComments(commentRows);
+    const commentIds = commentRows.map((c) => c.id);
+    if (commentIds.length > 0) {
+      const { data: reactionRows } = await supabase
+        .from('comment_reactions')
+        .select('*')
+        .in('comment_id', commentIds);
+      setReactions((reactionRows as CommentReaction[]) ?? []);
+    } else {
+      setReactions([]);
+    }
     setActivityLogs((activityRes.data as unknown as ActivityLog[]) ?? []);
     const memberProfiles = (membersRes.data?.map((m) => m.profile) as unknown as Profile[]) ?? [];
     // Include the project owner (may not be a project_member row)
@@ -257,6 +272,14 @@ export default function TaskDetailPage() {
           });
         }
       )
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'comment_reactions' }, (payload) => {
+        const r = payload.new as CommentReaction;
+        setReactions((prev) => (prev.some((x) => x.id === r.id) ? prev : [...prev, r]));
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'comment_reactions' }, (payload) => {
+        const old = payload.old as { id?: string };
+        if (old?.id) setReactions((prev) => prev.filter((x) => x.id !== old.id));
+      })
       .subscribe();
 
     return () => {
@@ -404,12 +427,40 @@ export default function TaskDetailPage() {
               isMe ? 'bg-green-600' : 'bg-[#800000]'
             }`}
           >
-            {isMe ? 'You' : name}
+            {name}
           </span>
         );
       }
       return <span key={i}>{part}</span>;
     });
+  };
+
+  const toggleReaction = async (commentId: string, emoji: string) => {
+    if (!user) return;
+    setReactionPickerFor(null);
+    const existing = reactions.find(
+      (r) => r.comment_id === commentId && r.user_id === user.id && r.emoji === emoji
+    );
+    if (existing) {
+      const { error } = await supabase.from('comment_reactions').delete().eq('id', existing.id);
+      if (error) {
+        toast.error(error.message);
+        return;
+      }
+      setReactions((prev) => prev.filter((r) => r.id !== existing.id));
+      return;
+    }
+    const { data, error } = await supabase
+      .from('comment_reactions')
+      .insert({ comment_id: commentId, user_id: user.id, emoji })
+      .select()
+      .single();
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    const created = data as CommentReaction;
+    setReactions((prev) => (prev.some((r) => r.id === created.id) ? prev : [...prev, created]));
   };
 
   const addComment = async () => {
@@ -811,6 +862,13 @@ export default function TaskDetailPage() {
                   {comments.map((comment) => {
                     const isMine = comment.user_id === user?.id;
                     const isEditingThis = editingCommentId === comment.id;
+                    const groupedReactions = reactions
+                      .filter((r) => r.comment_id === comment.id)
+                      .reduce<Record<string, { count: number; mine: boolean }>>((acc, r) => {
+                        const prev = acc[r.emoji] ?? { count: 0, mine: false };
+                        acc[r.emoji] = { count: prev.count + 1, mine: prev.mine || r.user_id === user?.id };
+                        return acc;
+                      }, {});
                     return (
                       <div key={comment.id} className={`flex gap-2.5 ${isMine ? 'flex-row-reverse' : ''}`}>
                         <Tooltip>
@@ -956,6 +1014,55 @@ export default function TaskDetailPage() {
                               </>
                             )}
                           </div>
+                          {!isEditingThis && (
+                            <div className={`flex flex-wrap items-center gap-1 mt-1 ${isMine ? 'justify-end' : ''}`}>
+                              {Object.entries(groupedReactions).map(([emoji, info]) => (
+                                <button
+                                  key={emoji}
+                                  type="button"
+                                  onClick={() => toggleReaction(comment.id, emoji)}
+                                  className={cn(
+                                    'flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs transition-colors',
+                                    info.mine
+                                      ? 'border-primary/40 bg-primary/10'
+                                      : 'border-border/60 bg-secondary/40 hover:bg-secondary/70'
+                                  )}
+                                  title={info.mine ? 'Remove your reaction' : 'Add reaction'}
+                                >
+                                  <span className="text-sm leading-none">{emoji}</span>
+                                  <span className="text-[10px] font-semibold text-muted-foreground">{info.count}</span>
+                                </button>
+                              ))}
+                              <Popover
+                                open={reactionPickerFor === comment.id}
+                                onOpenChange={(open) => setReactionPickerFor(open ? comment.id : null)}
+                              >
+                                <PopoverTrigger asChild>
+                                  <button
+                                    type="button"
+                                    className="flex h-6 w-6 items-center justify-center rounded-full text-muted-foreground/50 transition-colors hover:bg-secondary/60 hover:text-foreground"
+                                    title="Add reaction"
+                                  >
+                                    <SmilePlus className="h-3.5 w-3.5" />
+                                  </button>
+                                </PopoverTrigger>
+                                <PopoverContent align={isMine ? 'end' : 'start'} className="w-auto p-1.5">
+                                  <div className="flex items-center gap-0.5">
+                                    {REACTION_EMOJIS.map((emoji) => (
+                                      <button
+                                        key={emoji}
+                                        type="button"
+                                        onClick={() => toggleReaction(comment.id, emoji)}
+                                        className="h-8 w-8 rounded-lg text-lg leading-none transition-colors hover:bg-accent"
+                                      >
+                                        {emoji}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </PopoverContent>
+                              </Popover>
+                            </div>
+                          )}
                           <div className={`flex items-center gap-2 mt-1 px-1 text-[11px] text-muted-foreground ${isMine ? 'flex-row-reverse' : ''}`}>
                             <span className="font-medium">
                               {comment.profile?.full_name ?? comment.profile?.email}

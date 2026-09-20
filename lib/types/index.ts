@@ -123,6 +123,14 @@ export interface Comment {
   profile?: Profile;
 }
 
+export interface CommentReaction {
+  id: string;
+  comment_id: string;
+  user_id: string;
+  emoji: string;
+  created_at: string;
+}
+
 export interface Notification {
   id: string;
   user_id: string;
