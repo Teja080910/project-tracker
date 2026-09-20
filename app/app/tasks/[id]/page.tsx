@@ -116,7 +116,7 @@ export default function TaskDetailPage() {
   const commentsListRef = useRef<HTMLDivElement>(null);
   const activityCardRef = useRef<HTMLDivElement>(null);
   const chatCardRef = useRef<HTMLDivElement>(null);
-  const [chatHeight, setChatHeight] = useState(420);
+  const [chatHeight, setChatHeight] = useState<number | null>(420);
 
   // Chat card bottom = activity card bottom (desktop side-by-side only);
   // keep chat height synced to activity height without self-triggering.
@@ -127,7 +127,8 @@ export default function TaskDetailPage() {
       const chatEl = chatCardRef.current;
       if (!chatEl) return;
       if (window.innerWidth < 1024) {
-        setChatHeight(420);
+        // Mobile: let the card grow with its content so the composer is never clipped
+        setChatHeight(null);
         return;
       }
       const activityBottom = activityEl.getBoundingClientRect().bottom;
@@ -791,7 +792,7 @@ export default function TaskDetailPage() {
           <Card
             ref={chatCardRef}
             className="card-hover animate-fade-in-up stagger-2 flex flex-col"
-            style={{ height: chatHeight }}
+            style={chatHeight != null ? { height: chatHeight } : undefined}
           >
             <CardHeader className="shrink-0">
               <CardTitle className="text-base flex items-center gap-2">
@@ -802,7 +803,7 @@ export default function TaskDetailPage() {
             <CardContent className="p-0 flex-1 flex flex-col overflow-hidden">
               {/* Comment list — chat style (top) */}
               {comments.length === 0 ? (
-                <div className="py-10 flex-1">
+                <div className="py-10 flex-1 min-h-0">
                   <EmptyState icon={MessageSquare} title="No comments yet" description="Start the conversation" />
                 </div>
               ) : (
