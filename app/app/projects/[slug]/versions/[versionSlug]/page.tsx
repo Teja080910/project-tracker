@@ -324,31 +324,33 @@ function VersionDetailContent() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3 animate-fade-in-up">
-        <BackButton fallbackHref={`/app/projects/${projectSlug}`} />
-        <div className="flex-1">
-          <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              <Tag className="h-4.5 w-4.5" />
+      <div className="flex flex-col gap-3 animate-fade-in-up sm:flex-row sm:items-center">
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          <BackButton fallbackHref={`/app/projects/${projectSlug}`} />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <Tag className="h-4.5 w-4.5" />
+              </div>
+              <h1 className="text-xl sm:text-2xl font-semibold tracking-tight truncate">{version.name}</h1>
+              <Badge
+                variant="outline"
+                className={`text-xs shrink-0 bg-${vMeta.color}-500/10 text-${vMeta.color}-600 dark:text-${vMeta.color}-400 border-${vMeta.color}-500/20`}
+              >
+                {vMeta.label}
+              </Badge>
             </div>
-            <h1 className="text-2xl font-semibold tracking-tight">{version.name}</h1>
-            <Badge
-              variant="outline"
-              className={`text-xs bg-${vMeta.color}-500/10 text-${vMeta.color}-600 dark:text-${vMeta.color}-400 border-${vMeta.color}-500/20`}
-            >
-              {vMeta.label}
-            </Badge>
+            {project && (
+              <p className="text-sm text-muted-foreground mt-1 truncate">
+                <Link href={`/app/projects/${projectSlug}`} className="hover:underline">
+                  {project.name}
+                </Link>
+              </p>
+            )}
           </div>
-          {project && (
-            <p className="text-sm text-muted-foreground mt-1">
-              <Link href={`/app/projects/${projectSlug}`} className="hover:underline">
-                {project.name}
-              </Link>
-            </p>
-          )}
         </div>
-        <div className="flex items-center gap-2 flex-wrap justify-end">
-          <Button variant="outline" size="sm" onClick={() => {
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
+          <Button variant="outline" size="sm" className="w-full sm:w-auto" onClick={() => {
             setEditName(version.name);
             setEditDescription(version.description ?? '');
             setEditReleaseDate(version.release_date ?? '');
@@ -358,7 +360,7 @@ function VersionDetailContent() {
             <Settings className="h-4 w-4 mr-2" />
             Settings
           </Button>
-          <Button onClick={() => setTaskModalOpen(true)}>
+          <Button className="w-full sm:w-auto" onClick={() => setTaskModalOpen(true)}>
             <Plus className="h-4 w-4 mr-2" />
             New Task
           </Button>
@@ -574,8 +576,8 @@ function VersionDetailContent() {
       )}
 
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-2 animate-fade-in-up stagger-1">
-        <div className="relative flex-1 min-w-[200px] max-w-xs">
+      <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center animate-fade-in-up stagger-1">
+        <div className="relative col-span-2 sm:flex-1 sm:min-w-[200px] sm:max-w-xs">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search tasks..."
@@ -595,7 +597,7 @@ function VersionDetailContent() {
             updateParams({ status: v });
           }}
         >
-          <SelectTrigger className="h-9 w-36">
+          <SelectTrigger className="h-9 w-full sm:w-36">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
@@ -613,7 +615,7 @@ function VersionDetailContent() {
             updateParams({ type: v });
           }}
         >
-          <SelectTrigger className="h-9 w-32">
+          <SelectTrigger className="h-9 w-full sm:w-32">
             <SelectValue placeholder="Type" />
           </SelectTrigger>
           <SelectContent>
@@ -631,7 +633,7 @@ function VersionDetailContent() {
             updateParams({ priority: v });
           }}
         >
-          <SelectTrigger className="h-9 w-36">
+          <SelectTrigger className="h-9 w-full sm:w-36">
             <SelectValue placeholder="Priority" />
           </SelectTrigger>
           <SelectContent>
@@ -649,7 +651,7 @@ function VersionDetailContent() {
             updateParams({ assignee: v });
           }}
         >
-          <SelectTrigger className="h-9 w-40">
+          <SelectTrigger className="h-9 w-full sm:w-40">
             <SelectValue placeholder="Assignee" />
           </SelectTrigger>
           <SelectContent>
@@ -686,13 +688,13 @@ function VersionDetailContent() {
             <Link
               key={task.id}
               href={`/app/tasks/${task.number}`}
-              className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-secondary/50 transition-all duration-200 border border-transparent hover:border-border hover:shadow-soft group row-hover"
+              className="flex flex-wrap items-center gap-2 sm:gap-3 px-3 py-2.5 sm:py-2 rounded-lg hover:bg-secondary/50 transition-all duration-200 border border-transparent hover:border-border hover:shadow-soft group row-hover"
             >
               <TypeBadge type={task.type} />
-              <span className="text-xs text-muted-foreground">#{task.number}</span>
-              <span className="text-sm flex-1 truncate">{task.title}</span>
+              <span className="text-xs text-muted-foreground shrink-0">#{task.number}</span>
+              <span className="text-sm order-first basis-full truncate sm:order-none sm:basis-auto sm:flex-1">{task.title}</span>
               <PriorityBadge priority={task.priority} />
-              {task.assignee && <UserAvatar profile={task.assignee} className="h-6 w-6" />}
+              {task.assignee && <UserAvatar profile={task.assignee} className="hidden sm:block h-6 w-6" />}
               <StatusBadge status={task.status} />
             </Link>
           ))}
