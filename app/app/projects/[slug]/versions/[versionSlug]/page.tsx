@@ -1,9 +1,9 @@
 'use client';
 
-import { Suspense, useEffect, useState, useCallback } from 'react';
+import { Suspense, useEffect, useRef, useState, useCallback } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Tag, Plus, Calendar, Search, Settings, Loader2, Check, ChevronsUpDown } from 'lucide-react';
+import { Tag, Plus, Calendar, Search, Settings, Loader2, Check, ChevronsUpDown, File as FileIcon, X } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -48,6 +48,7 @@ import { StatusBadge, TypeBadge, PriorityBadge } from '@/components/shared/badge
 import { supabase } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth-context';
 import { sendPushToUser } from '@/lib/push';
+import { sendNotificationEmail } from '@/lib/email-client';
 import { getVersionStatusMeta, TASK_STATUSES, TASK_TYPES, TASK_PRIORITIES } from '@/lib/constants';
 import { formatDate, cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -65,7 +66,7 @@ function VersionDetailContent() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const projectSlug = params.slug as string;
   const versionSlug = params.versionSlug as string;
 
@@ -110,6 +111,13 @@ function VersionDetailContent() {
   const [taskAssigneeOpen, setTaskAssigneeOpen] = useState(false);
   const [taskDueDate, setTaskDueDate] = useState('');
   const [taskCreating, setTaskCreating] = useState(false);
+  const [taskCommentFile, setTaskCommentFile] = useState<File | null>(null);
+  const [taskCommentPreview, setTaskCommentPreview] = useState<string | null>(null);
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [mentionIndex, setMentionIndex] = useState(0);
+  const [mentionOpen, setMentionOpen] = useState(false);
+  const taskCommentTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const taskCommentFileInputRef = useRef<HTMLInputElement>(null);
   const [members, setMembers] = useState<Profile[]>([]);
 
   const fetchData = useCallback(async () => {
@@ -217,6 +225,77 @@ function VersionDetailContent() {
     }
   };
 
+  const isImageAttachment = (t: string) => t.startsWith('image/');
+  const isVideoAttachment = (t: string) => t.startsWith('video/');
+  const isMarkdownAttachment = (t: string, name: string) =>
+    t === 'text/markdown' || t === 'text/x-markdown' || t === 'application/markdown' || /\.(md|markdown)$/i.test(name);
+
+  const taskMentionCandidates = members.filter((m) => {
+    const q = (mentionQuery ?? '').toLowerCase();
+    return (m.full_name ?? '').toLowerCase().includes(q) || m.email.toLowerCase().includes(q);
+  });
+
+  const handleTaskCommentChange = (value: string) => {
+    setTaskComment(value);
+    const caret = taskCommentTextareaRef.current?.selectionStart ?? value.length;
+    const before = value.slice(0, caret);
+    const atIdx = before.lastIndexOf('@');
+    if (atIdx !== -1 && atIdx === before.length - 1) {
+      setMentionQuery('');
+      setMentionIndex(0);
+      setMentionOpen(true);
+    } else if (atIdx !== -1 && /^[a-zA-Z0-9._-]*$/.test(before.slice(atIdx + 1))) {
+      setMentionQuery(before.slice(atIdx + 1));
+      setMentionIndex(0);
+      setMentionOpen(true);
+    } else {
+      setMentionOpen(false);
+    }
+  };
+
+  const insertTaskMention = (m: Profile) => {
+    const el = taskCommentTextareaRef.current;
+    if (!el) return;
+    const caret = el.selectionStart ?? taskComment.length;
+    const before = taskComment.slice(0, caret);
+    const atIdx = before.lastIndexOf('@');
+    const after = taskComment.slice(caret);
+    const name = m.full_name ?? m.email;
+    const next = `${before.slice(0, atIdx)}@${name} ${after}`;
+    setTaskComment(next);
+    setMentionOpen(false);
+    setMentionQuery(null);
+    requestAnimationFrame(() => {
+      const pos = atIdx + name.length + 2;
+      el.focus();
+      el.setSelectionRange(pos, pos);
+    });
+  };
+
+  const handleTaskCommentKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (mentionOpen) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setMentionIndex(Math.min(mentionIndex + 1, taskMentionCandidates.length - 1));
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setMentionIndex(Math.max(mentionIndex - 1, 0));
+      } else if (e.key === 'Enter' || e.key === 'Tab') {
+        if (taskMentionCandidates[mentionIndex]) {
+          e.preventDefault();
+          insertTaskMention(taskMentionCandidates[mentionIndex]);
+        }
+      } else if (e.key === 'Escape') {
+        setMentionOpen(false);
+      }
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      e.preventDefault();
+      createTask();
+    }
+  };
+
   const createTask = async () => {
     if (!user || !project || !version) return;
     if (!taskTitle.trim()) {
@@ -249,12 +328,58 @@ function VersionDetailContent() {
 
     try {
       const commentText = taskComment.trim();
-      if (commentText) {
-        await supabase.from('comments').insert({
+      if (commentText || taskCommentFile) {
+        let imagePath: string | null = null;
+        let fileType: string | null = null;
+        let fileName: string | null = null;
+        if (taskCommentFile) {
+          const ext = taskCommentFile.name.split('.').pop() ?? 'png';
+          fileType = taskCommentFile.type || (isMarkdownAttachment('', taskCommentFile.name) ? 'text/markdown' : null);
+          fileName = taskCommentFile.name;
+          const storageName = `${project.id}/${data.id}/comments/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+          const { error: uploadError } = await supabase.storage
+            .from('task-screenshots')
+            .upload(storageName, taskCommentFile, {
+              contentType: fileType ?? undefined,
+              cacheControl: '3600',
+            });
+          if (uploadError) throw uploadError;
+          imagePath = storageName;
+        }
+        const { error: commentErr } = await supabase.from('comments').insert({
           task_id: data.id,
           user_id: user.id,
-          message: commentText,
+          message: commentText || ' ',
+          image_path: imagePath,
+          file_type: fileType,
+          file_name: fileName,
         });
+        if (commentErr) throw commentErr;
+
+        const projectSuffix = ` · ${project.name}`;
+        const mentioned = members.filter(
+          (m) => m.id !== user.id && commentText.includes(`@${m.full_name ?? m.email}`)
+        );
+        for (const m of mentioned) {
+          const title = `${profile?.full_name ?? profile?.email} mentioned you in #${data.number}${projectSuffix}`;
+          await supabase.from('notifications').insert({
+            user_id: m.id,
+            actor_id: user.id,
+            project_id: project.id,
+            type: 'mention',
+            title,
+            body: commentText.slice(0, 100) || 'Sent an attachment',
+            link: `/app/tasks/${data.number}`,
+            priority: taskPriority,
+          });
+          sendNotificationEmail(
+            m.email,
+            title,
+            commentText.slice(0, 200) || 'Sent an attachment',
+            `${window.location.origin}/app/tasks/${data.number}`
+          );
+          sendPushToUser(m.id, title, commentText.slice(0, 100) || 'Sent an attachment', `/app/tasks/${data.number}`);
+        }
       }
 
       await supabase.from('activity_logs').insert({
@@ -288,6 +413,10 @@ function VersionDetailContent() {
       setTaskModalOpen(false);
       setTaskTitle('');
       setTaskComment('');
+      setTaskCommentFile(null);
+      setTaskCommentPreview(null);
+      setMentionOpen(false);
+      setMentionQuery(null);
       setTaskType('task');
       setTaskPriority('medium');
       setTaskAssigneeId('none');
@@ -369,7 +498,7 @@ function VersionDetailContent() {
 
       {/* New Task modal */}
       <Dialog open={taskModalOpen} onOpenChange={setTaskModalOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>New Task in {version.name}</DialogTitle>
           </DialogHeader>
@@ -385,12 +514,123 @@ function VersionDetailContent() {
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium">Comment</label>
-              <Textarea
-                value={taskComment}
-                onChange={(e) => setTaskComment(e.target.value)}
-                rows={3}
-                placeholder="Add a comment... (optional)"
-              />
+              {taskCommentPreview && taskCommentFile && (
+                <div className="relative inline-block max-w-[320px]">
+                  {isImageAttachment(taskCommentFile.type) ? (
+                    <img
+                      src={taskCommentPreview}
+                      alt="Attached"
+                      className="h-24 w-24 object-cover rounded-lg border border-border"
+                    />
+                  ) : isVideoAttachment(taskCommentFile.type) ? (
+                    <video
+                      src={taskCommentPreview}
+                      className="h-28 rounded-lg border border-border"
+                      controls
+                      muted
+                    />
+                  ) : (
+                    <div className="flex items-center gap-2 rounded-lg border border-border bg-secondary/50 px-3 py-2">
+                      <FileIcon className="h-8 w-8 text-muted-foreground shrink-0" />
+                      <span className="text-sm font-medium truncate max-w-[200px]">{taskCommentFile.name}</span>
+                    </div>
+                  )}
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="icon"
+                    className="absolute -top-2 -right-2 h-6 w-6"
+                    onClick={() => {
+                      setTaskCommentFile(null);
+                      setTaskCommentPreview(null);
+                    }}
+                  >
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              )}
+              <div className="relative">
+                <Textarea
+                  ref={taskCommentTextareaRef}
+                  value={taskComment}
+                  onChange={(e) => handleTaskCommentChange(e.target.value)}
+                  onKeyDown={handleTaskCommentKeyDown}
+                  rows={3}
+                  placeholder="Add a comment... use @ to mention someone (optional)"
+                />
+                {mentionOpen && taskMentionCandidates.length > 0 && (
+                  <div className="absolute bottom-full mb-2 w-72 rounded-xl border border-border bg-popover shadow-elevated z-20 overflow-hidden animate-fade-in-scale">
+                    <p className="px-3 py-1.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider border-b border-border/60">
+                      Mention someone
+                    </p>
+                    <div className="max-h-48 overflow-y-auto p-1">
+                      {taskMentionCandidates.map((m, i) => (
+                        <button
+                          key={m.id}
+                          type="button"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            insertTaskMention(m);
+                          }}
+                          onMouseEnter={() => setMentionIndex(i)}
+                          className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm text-left transition-colors ${
+                            i === mentionIndex ? 'bg-accent text-accent-foreground' : ''
+                          }`}
+                        >
+                          <UserAvatar profile={m} className="h-6 w-6 shrink-0" />
+                          <span className="flex flex-col min-w-0">
+                            <span className="truncate">{m.full_name ?? m.email}</span>
+                            {m.full_name && (
+                              <span className="text-[11px] text-muted-foreground truncate">{m.email}</span>
+                            )}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  ref={taskCommentFileInputRef}
+                  type="file"
+                  accept="image/*,video/*,application/pdf,.md,.markdown,text/markdown"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) {
+                      const ok =
+                        f.type.startsWith('image/') ||
+                        f.type.startsWith('video/') ||
+                        f.type === 'application/pdf' ||
+                        isMarkdownAttachment(f.type, f.name);
+                      if (!ok) {
+                        toast.error('Only images, videos, PDF and Markdown (.md) files are allowed');
+                        return;
+                      }
+                      if (f.size > 50 * 1024 * 1024) {
+                        toast.error('File too large (max 50 MB)');
+                        return;
+                      }
+                      setTaskCommentFile(f);
+                      setTaskCommentPreview(URL.createObjectURL(f));
+                    }
+                    if (taskCommentFileInputRef.current) taskCommentFileInputRef.current.value = '';
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => taskCommentFileInputRef.current?.click()}
+                >
+                  <FileIcon className="h-4 w-4 mr-2" />
+                  Attach
+                </Button>
+                {taskCommentFile && (
+                  <span className="text-xs text-muted-foreground truncate">{taskCommentFile.name}</span>
+                )}
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
