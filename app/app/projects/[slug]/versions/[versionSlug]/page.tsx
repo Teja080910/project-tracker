@@ -498,11 +498,11 @@ function VersionDetailContent() {
 
       {/* New Task modal */}
       <Dialog open={taskModalOpen} onOpenChange={setTaskModalOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-lg max-h-[85dvh] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden">
           <DialogHeader>
             <DialogTitle>New Task in {version.name}</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-2">
+          <div className="space-y-4 py-2 min-w-0 overflow-y-auto min-h-0">
             <div className="space-y-2">
               <label className="text-sm font-medium">Title *</label>
               <Input
