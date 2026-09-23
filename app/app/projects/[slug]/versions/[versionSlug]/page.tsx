@@ -513,9 +513,9 @@ function VersionDetailContent() {
               />
             </div>
             <div className="space-y-2">
-              <label className="text-sm font-medium">Comment</label>
+              <label className="text-sm font-medium block">Comment</label>
               {taskCommentPreview && taskCommentFile && (
-                <div className="relative inline-block max-w-[320px]">
+                <div className="relative inline-block max-w-full">
                   {isImageAttachment(taskCommentFile.type) ? (
                     <img
                       src={taskCommentPreview}
@@ -532,7 +532,7 @@ function VersionDetailContent() {
                   ) : (
                     <div className="flex items-center gap-2 rounded-lg border border-border bg-secondary/50 px-3 py-2">
                       <FileIcon className="h-8 w-8 text-muted-foreground shrink-0" />
-                      <span className="text-sm font-medium truncate max-w-[200px]">{taskCommentFile.name}</span>
+                      <span className="text-sm font-medium truncate min-w-0 max-w-[200px]">{taskCommentFile.name}</span>
                     </div>
                   )}
                   <Button
@@ -628,7 +628,7 @@ function VersionDetailContent() {
                   Attach
                 </Button>
                 {taskCommentFile && (
-                  <span className="text-xs text-muted-foreground truncate">{taskCommentFile.name}</span>
+                  <span className="text-xs text-muted-foreground truncate min-w-0 flex-1">{taskCommentFile.name}</span>
                 )}
               </div>
             </div>
