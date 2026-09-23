@@ -512,7 +512,7 @@ function VersionDetailContent() {
                 autoFocus
               />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2 min-w-0">
               <label className="text-sm font-medium block">Comment</label>
               {taskCommentPreview && taskCommentFile && (
                 <div className="relative inline-block max-w-full">
