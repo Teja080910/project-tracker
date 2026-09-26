@@ -131,6 +131,18 @@ export interface CommentReaction {
   created_at: string;
 }
 
+export interface ProjectDoc {
+  id: string;
+  project_id: string;
+  parent_id: string | null;
+  title: string;
+  content: string;
+  created_by: string | null;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Notification {
   id: string;
   user_id: string;

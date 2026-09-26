@@ -19,6 +19,7 @@ import {
   Package,
   Copy,
   Upload,
+  BookOpen,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -358,6 +359,12 @@ export default function ProjectDetailPage() {
             <p className="text-sm text-muted-foreground mt-1">Client: {project.client_name}</p>
           )}
         </div>
+        <Button variant="outline" size="sm" asChild>
+          <Link href={`/app/projects/${projectSlug}/docs`}>
+            <BookOpen className="h-4 w-4 mr-2" />
+            Docs
+          </Link>
+        </Button>
         {canManage && (
           <Dialog open={settingsOpen} onOpenChange={(open) => {
             setSettingsOpen(open);
