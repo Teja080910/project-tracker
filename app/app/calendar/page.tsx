@@ -47,6 +47,7 @@ export default function CalendarPage() {
       .from('tasks')
       .select('*, project:projects(*), version:versions(*), assignee:profiles!assignee_id(*), reporter:profiles!reporter_id(*)')
       .in('project_id', projectIds)
+      .is('deleted_at', null)
       .not('due_date', 'is', null)
       .order('due_date', { ascending: true });
 

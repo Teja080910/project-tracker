@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useRef, useState, useCallback } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Tag, Plus, Calendar, Search, Settings, Loader2, Check, ChevronsUpDown, File as FileIcon, X } from 'lucide-react';
+import { Tag, Plus, Calendar, Search, Settings, Loader2, Check, ChevronsUpDown, File as FileIcon, X, RotateCcw } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -79,6 +79,7 @@ function VersionDetailContent() {
   const [filterType, setFilterType] = useState<string>(() => searchParams.get('type') ?? 'all');
   const [filterPriority, setFilterPriority] = useState<string>(() => searchParams.get('priority') ?? 'all');
   const [filterAssignee, setFilterAssignee] = useState<string>(() => searchParams.get('assignee') ?? 'all');
+  const [taskView, setTaskView] = useState<'active' | 'deleted'>(() => (searchParams.get('view') === 'deleted' ? 'deleted' : 'active'));
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [editName, setEditName] = useState('');
   const [editDescription, setEditDescription] = useState('');
@@ -173,7 +174,11 @@ function VersionDetailContent() {
     fetchData();
   }, [fetchData]);
 
-  const filtered = tasks.filter((t) => {
+  const isSuperAdmin = profile?.role === 'super_admin';
+  const showDeleted = isSuperAdmin && taskView === 'deleted';
+  const pool = showDeleted ? tasks.filter((t) => t.deleted_at) : tasks.filter((t) => !t.deleted_at);
+
+  const filtered = pool.filter((t) => {
     const matchesSearch = t.title.toLowerCase().includes(search.toLowerCase());
     const matchesStatus = filterStatus === 'all' || t.status === filterStatus;
     const matchesType = filterType === 'all' || t.type === filterType;
@@ -199,6 +204,19 @@ function VersionDetailContent() {
         .map((t) => [t.assignee!.id, t.assignee!])
     ).values()
   );
+
+  const restoreTask = async (id: string) => {
+    const { error } = await supabase
+      .from('tasks')
+      .update({ deleted_at: null, deleted_by: null })
+      .eq('id', id);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success('Task restored');
+    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, deleted_at: null, deleted_by: null } : t)));
+  };
 
   const saveVersion = async () => {
     if (!editName.trim()) {
@@ -829,6 +847,24 @@ function VersionDetailContent() {
             className="pl-9 h-9"
           />
         </div>
+        {isSuperAdmin && (
+          <Select
+            value={showDeleted ? 'deleted' : 'active'}
+            onValueChange={(v) => {
+              setTaskView(v as 'active' | 'deleted');
+              setPage(1);
+              updateParams({ view: v === 'deleted' ? 'deleted' : '' });
+            }}
+          >
+            <SelectTrigger className="h-9 w-full sm:w-36">
+              <SelectValue placeholder="View" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="active">Active Tasks</SelectItem>
+              <SelectItem value="deleted">Deleted Tasks</SelectItem>
+            </SelectContent>
+          </Select>
+        )}
         <Select
           value={filterStatus}
           onValueChange={(v) => {
@@ -910,10 +946,22 @@ function VersionDetailContent() {
           <CardContent className="py-6">
             <EmptyState
               icon={Tag}
-              title={tasks.length === 0 ? "No tasks yet" : "No tasks match filters"}
-              description={tasks.length === 0 ? "Create a task for this version" : "Try adjusting your filters"}
+              title={
+                showDeleted
+                  ? 'No deleted tasks'
+                  : tasks.filter((t) => !t.deleted_at).length === 0
+                    ? 'No tasks yet'
+                    : 'No tasks match filters'
+              }
+              description={
+                showDeleted
+                  ? 'Deleted tasks from this version will appear here for Super Admin'
+                  : tasks.filter((t) => !t.deleted_at).length === 0
+                    ? 'Create a task for this version'
+                    : 'Try adjusting your filters'
+              }
               action={
-                tasks.length === 0 ? (
+                !showDeleted && tasks.filter((t) => !t.deleted_at).length === 0 ? (
                   <Button size="sm" onClick={() => setTaskModalOpen(true)}>
                     New Task
                   </Button>
@@ -924,20 +972,54 @@ function VersionDetailContent() {
         </Card>
       ) : (
         <div className="space-y-1">
-          {pageItems.map((task) => (
-            <Link
-              key={task.id}
-              href={`/app/tasks/${task.number}`}
-              className="flex flex-wrap items-center gap-2 sm:gap-3 px-3 py-2.5 sm:py-2 rounded-lg hover:bg-secondary/50 transition-all duration-200 border border-transparent hover:border-border hover:shadow-soft group row-hover"
-            >
-              <TypeBadge type={task.type} />
-              <span className="text-xs text-muted-foreground shrink-0">#{task.number}</span>
-              <span className="text-sm order-first basis-full truncate sm:order-none sm:basis-auto sm:flex-1">{task.title}</span>
-              <PriorityBadge priority={task.priority} />
-              {task.assignee && <UserAvatar profile={task.assignee} className="hidden sm:block h-6 w-6" />}
-              <StatusBadge status={task.status} />
-            </Link>
-          ))}
+          {pageItems.map((task) => {
+            const row = (
+              <>
+                <TypeBadge type={task.type} />
+                <span className="text-xs text-muted-foreground shrink-0">#{task.number}</span>
+                <span
+                  className={`text-sm order-first basis-full truncate sm:order-none sm:basis-auto sm:flex-1 ${
+                    task.deleted_at ? 'line-through text-muted-foreground' : ''
+                  }`}
+                >
+                  {task.title}
+                </span>
+                <PriorityBadge priority={task.priority} />
+                {task.assignee && <UserAvatar profile={task.assignee} className="hidden sm:block h-6 w-6" />}
+                <StatusBadge status={task.status} />
+              </>
+            );
+            if (showDeleted) {
+              return (
+                <div
+                  key={task.id}
+                  className="flex items-center gap-2 px-3 py-2.5 sm:py-2 rounded-lg hover:bg-secondary/50 transition-all duration-200 border border-transparent hover:border-border hover:shadow-soft"
+                >
+                  <Link href={`/app/tasks/${task.number}`} className="flex flex-wrap items-center gap-2 sm:gap-3 flex-1 min-w-0 row-hover">
+                    {row}
+                  </Link>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="shrink-0 text-muted-foreground"
+                    onClick={() => restoreTask(task.id)}
+                  >
+                    <RotateCcw className="h-4 w-4 mr-1" />
+                    Restore
+                  </Button>
+                </div>
+              );
+            }
+            return (
+              <Link
+                key={task.id}
+                href={`/app/tasks/${task.number}`}
+                className="flex flex-wrap items-center gap-2 sm:gap-3 px-3 py-2.5 sm:py-2 rounded-lg hover:bg-secondary/50 transition-all duration-200 border border-transparent hover:border-border hover:shadow-soft group row-hover"
+              >
+                {row}
+              </Link>
+            );
+          })}
         </div>
       )}
       <PaginationControls

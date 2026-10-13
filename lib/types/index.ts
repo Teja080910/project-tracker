@@ -1,4 +1,4 @@
-export type Role = 'super_admin' | 'project_admin' | 'developer' | 'tester' | 'viewer';
+export type Role = 'super_admin' | 'admin' | 'project_admin' | 'developer' | 'tester' | 'viewer';
 export type ProjectStatus = 'active' | 'completed' | 'archived';
 export type VersionStatus = 'active' | 'released' | 'archived';
 export type TaskType = 'task' | 'bug' | 'story' | 'issue';
@@ -91,6 +91,8 @@ export interface Task {
   assignee_id: string | null;
   reporter_id: string;
   due_date: string | null;
+  deleted_at: string | null;
+  deleted_by: string | null;
   created_at: string;
   updated_at: string;
   project?: Project;

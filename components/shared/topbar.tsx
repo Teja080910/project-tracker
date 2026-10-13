@@ -105,6 +105,7 @@ export function Topbar() {
           .from('tasks')
           .select('id, number, title')
           .or(`title.ilike.%${searchQuery}%,description.ilike.%${searchQuery}%`)
+          .is('deleted_at', null)
           .limit(5),
         supabase
           .from('profiles')

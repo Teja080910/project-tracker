@@ -48,7 +48,7 @@ import {
   CommandItem,
   CommandList,
 } from '@/components/ui/command';
-import { Check, ChevronsUpDown, SmilePlus } from 'lucide-react';
+import { Check, ChevronsUpDown, SmilePlus, RotateCcw } from 'lucide-react';
 import { BackButton } from '@/components/shared/back-button';
 import { UserAvatar } from '@/components/shared/user-avatar';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
@@ -717,12 +717,28 @@ export default function TaskDetailPage() {
 
   const deleteTask = async () => {
     if (!task) return;
-    const { error } = await supabase.from('tasks').delete().eq('id', taskId);
+    const { error } = await supabase
+      .from('tasks')
+      .update({ deleted_at: new Date().toISOString(), deleted_by: user?.id })
+      .eq('id', taskId);
     if (error) {
       toast.error(error.message);
     } else {
-      toast.success('Task deleted');
+      toast.success('Task moved to deleted tasks');
       router.push(`/app/projects/${task.project?.slug ?? task.project_id}`);
+    }
+  };
+
+  const restoreTask = async () => {
+    const { error } = await supabase
+      .from('tasks')
+      .update({ deleted_at: null, deleted_by: null })
+      .eq('id', taskId);
+    if (error) {
+      toast.error(error.message);
+    } else {
+      toast.success('Task restored');
+      await fetchTask();
     }
   };
 
@@ -787,20 +803,34 @@ export default function TaskDetailPage() {
           <TypeBadge type={task.type} />
           <span className="text-sm text-muted-foreground">#{task.number}</span>
         </div>
-        {canDelete && (
+        {canDelete && !task.deleted_at && (
           <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => setDeleteTaskOpen(true)}>
             <Trash2 className="h-4 w-4 mr-2" />
             Delete
           </Button>
         )}
+        {task.deleted_at && profile?.role === 'super_admin' && (
+          <Button variant="ghost" size="sm" onClick={restoreTask}>
+            <RotateCcw className="h-4 w-4 mr-2" />
+            Restore
+          </Button>
+        )}
       </div>
+
+      {task.deleted_at && (
+        <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive animate-fade-in-up">
+          <Trash2 className="h-4 w-4 shrink-0" />
+          This task is in deleted tasks{task.deleted_at ? ` (deleted ${formatRelativeTime(task.deleted_at)})` : ''}.
+          {profile?.role === 'super_admin' ? ' Use Restore to bring it back.' : ' Only Super Admin can see and restore it.'}
+        </div>
+      )}
 
       {/* Delete task confirmation */}
       <ConfirmDeleteDialog
         open={deleteTaskOpen}
         onOpenChange={setDeleteTaskOpen}
         title="Delete Task"
-        description={`This will permanently delete task #${task?.number} "${task?.title}" and all its comments and images. This action cannot be undone.`}
+        description={`This will move task #${task?.number} "${task?.title}" to deleted tasks. It will be hidden from all task lists; Super Admin can restore it later.`}
         confirmText={task?.title ?? ''}
         onConfirm={confirmDeleteTask}
         loading={deleteTaskLoading}

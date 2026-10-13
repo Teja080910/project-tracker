@@ -85,6 +85,10 @@ export default function ProjectsPage() {
 
   const createProject = async () => {
     if (!user) return;
+    if (profile && profile.role !== 'super_admin' && profile.role !== 'admin') {
+      toast.error('Only admins can create projects');
+      return;
+    }
     if (!name.trim()) {
       toast.error('Project name is required');
       return;
@@ -166,7 +170,7 @@ export default function ProjectsPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Projects</h1>
           <p className="text-sm text-muted-foreground mt-1">{projects.length} total</p>
         </div>
-        {profile?.role === 'super_admin' && (
+        {(profile?.role === 'super_admin' || profile?.role === 'admin') && (
           <Button className="animate-fade-in-scale" onClick={() => setModalOpen(true)}>
             <Plus className="h-4 w-4 mr-2" />
             New Project
@@ -256,7 +260,7 @@ export default function ProjectsPage() {
               title={search ? "No projects found" : "No projects yet"}
               description={search ? "Try a different search term" : "Create your first project to get started"}
               action={
-                !search && profile?.role === 'super_admin' ? (
+                !search && (profile?.role === 'super_admin' || profile?.role === 'admin') ? (
                   <Button onClick={() => setModalOpen(true)}>New Project</Button>
                 ) : undefined
               }

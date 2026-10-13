@@ -52,6 +52,7 @@ export const VERSION_STATUSES = [
 
 export const ROLES = [
   { value: 'super_admin', label: 'Super Admin' },
+  { value: 'admin', label: 'Admin' },
   { value: 'project_admin', label: 'Project Admin' },
   { value: 'developer', label: 'Developer' },
   { value: 'tester', label: 'Tester' },

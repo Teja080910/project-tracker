@@ -88,10 +88,10 @@ export default function DashboardPage() {
 
     if (projectIds.length > 0) {
       const [openRes, inProgressRes, completedRes, cancelledRes] = await Promise.all([
-        supabase.from('tasks').select('id', { count: 'exact', head: true }).in('project_id', projectIds).eq('status', 'open'),
-        supabase.from('tasks').select('id', { count: 'exact', head: true }).in('project_id', projectIds).eq('status', 'in_progress'),
-        supabase.from('tasks').select('id', { count: 'exact', head: true }).in('project_id', projectIds).eq('status', 'completed'),
-        supabase.from('tasks').select('id', { count: 'exact', head: true }).in('project_id', projectIds).eq('status', 'cancelled'),
+        supabase.from('tasks').select('id', { count: 'exact', head: true }).in('project_id', projectIds).eq('status', 'open').is('deleted_at', null),
+        supabase.from('tasks').select('id', { count: 'exact', head: true }).in('project_id', projectIds).eq('status', 'in_progress').is('deleted_at', null),
+        supabase.from('tasks').select('id', { count: 'exact', head: true }).in('project_id', projectIds).eq('status', 'completed').is('deleted_at', null),
+        supabase.from('tasks').select('id', { count: 'exact', head: true }).in('project_id', projectIds).eq('status', 'cancelled').is('deleted_at', null),
       ]);
       openTasks = openRes.count ?? 0;
       inProgressTasks = inProgressRes.count ?? 0;
@@ -114,12 +114,14 @@ export default function DashboardPage() {
         .from('tasks')
         .select('*, project:projects(*), assignee:profiles!assignee_id(*), reporter:profiles!reporter_id(*)')
         .eq('assignee_id', user.id)
+        .is('deleted_at', null)
         .order('updated_at', { ascending: false })
         .limit(5),
       supabase
         .from('tasks')
         .select('*, project:projects(*), assignee:profiles!assignee_id(*), reporter:profiles!reporter_id(*)')
         .in('project_id', projectIds.length > 0 ? projectIds : ['00000000-0000-0000-0000-000000000000'])
+        .is('deleted_at', null)
         .order('updated_at', { ascending: false })
         .limit(5),
     ]);

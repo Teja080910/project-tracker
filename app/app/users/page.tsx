@@ -108,7 +108,7 @@ export default function UsersPage() {
 
   const availableRoles = isSuperAdmin
     ? ROLES
-    : ROLES.filter((r) => r.value !== 'super_admin' && r.value !== 'project_admin');
+    : ROLES.filter((r) => r.value !== 'super_admin' && r.value !== 'admin' && r.value !== 'project_admin');
 
   if (!canManageUsers) {
     return (
