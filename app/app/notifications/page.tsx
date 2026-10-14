@@ -3,9 +3,10 @@
 import { Suspense, useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Bell, CheckCheck, Trash2, FolderKanban, Sparkles, MessageSquare, UserPlus, Tag, AlertCircle } from 'lucide-react';
+import { Bell, CheckCheck, Trash2, FolderKanban, Sparkles, MessageSquare, UserPlus, Tag, AlertCircle, Search } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/shared/empty-state';
 import { PaginationControls } from '@/components/shared/pagination';
@@ -54,6 +55,7 @@ function NotificationsContent() {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [priorityFilter, setPriorityFilter] = useState<string>(() => searchParams.get('priority') ?? 'all');
   const [typeFilter, setTypeFilter] = useState<string>(() => searchParams.get('type') ?? 'all');
+  const [search, setSearch] = useState<string>(() => searchParams.get('q') ?? '');
 
   const updateParams = useCallback(
     (updates: Record<string, string>) => {
@@ -156,6 +158,21 @@ function NotificationsContent() {
   const filtered = notifications.filter((n) => {
     if (priorityFilter !== 'all' && n.priority !== priorityFilter) return false;
     if (typeFilter !== 'all' && n.type !== typeFilter) return false;
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      const haystack = [
+        n.title,
+        n.body,
+        n.actor?.full_name,
+        n.actor?.email,
+        n.project?.name,
+        n.type.replace(/_/g, ' '),
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      if (!haystack.includes(q)) return false;
+    }
     return true;
   });
   const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -181,6 +198,19 @@ function NotificationsContent() {
       </div>
 
       <div className="flex flex-wrap items-center gap-2 animate-fade-in-up">
+        <div className="relative w-full sm:w-64">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search notifications..."
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+              updateParams({ q: e.target.value });
+            }}
+            className="pl-9 h-9"
+          />
+        </div>
         <Select
           value={priorityFilter}
           onValueChange={(v) => {
@@ -219,8 +249,8 @@ function NotificationsContent() {
             ))}
           </SelectContent>
         </Select>
-        {(priorityFilter !== 'all' || typeFilter !== 'all') && (
-          <Button variant="ghost" size="sm" className="h-9 text-xs" onClick={() => { setPriorityFilter('all'); setTypeFilter('all'); updateParams({ priority: 'all', type: 'all' }); }}>
+        {(priorityFilter !== 'all' || typeFilter !== 'all' || search.trim()) && (
+          <Button variant="ghost" size="sm" className="h-9 text-xs" onClick={() => { setPriorityFilter('all'); setTypeFilter('all'); setSearch(''); updateParams({ priority: 'all', type: 'all', q: '' }); }}>
             Clear filters
           </Button>
         )}
@@ -229,7 +259,15 @@ function NotificationsContent() {
       {filtered.length === 0 ? (
         <Card>
           <CardContent className="py-6">
-            <EmptyState icon={Bell} title="No notifications" description="You're all caught up!" />
+            <EmptyState
+              icon={Bell}
+              title={search.trim() || priorityFilter !== 'all' || typeFilter !== 'all' ? 'No notifications match' : 'No notifications'}
+              description={
+                search.trim() || priorityFilter !== 'all' || typeFilter !== 'all'
+                  ? 'Try adjusting your search or filters'
+                  : "You're all caught up!"
+              }
+            />
           </CardContent>
         </Card>
       ) : (
