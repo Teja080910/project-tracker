@@ -30,17 +30,24 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const link = (event.notification.data && event.notification.data.link) || '/app';
+  const targetUrl = new URL(link, self.location.origin).href;
 
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      // Focus a tab that is already on the target page
       for (const client of clientList) {
-        if ('focus' in client) {
-          client.navigate(link);
+        if (client.url === targetUrl && 'focus' in client) {
           return client.focus();
         }
       }
+      // Otherwise open the link in a NEW window — never rewrite the tab
+      // the user is currently working in
       if (self.clients.openWindow) {
         return self.clients.openWindow(link);
+      }
+      // Last resort: just focus an existing tab without navigating it
+      for (const client of clientList) {
+        if ('focus' in client) return client.focus();
       }
     })
   );
