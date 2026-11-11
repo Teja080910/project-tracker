@@ -248,6 +248,40 @@ function VersionDetailContent() {
   const isMarkdownAttachment = (t: string, name: string) =>
     t === 'text/markdown' || t === 'text/x-markdown' || t === 'application/markdown' || /\.(md|markdown)$/i.test(name);
 
+  const applyTaskCommentFile = (file: File) => {
+    const ok =
+      file.type.startsWith('image/') ||
+      file.type.startsWith('video/') ||
+      file.type === 'application/pdf' ||
+      isMarkdownAttachment(file.type, file.name);
+    if (!ok) {
+      toast.error('Only images, videos, PDF and Markdown (.md) files are allowed');
+      return;
+    }
+    if (file.size > 50 * 1024 * 1024) {
+      toast.error('File too large (max 50 MB)');
+      return;
+    }
+    setTaskCommentFile(file);
+    if (taskCommentPreview) URL.revokeObjectURL(taskCommentPreview);
+    setTaskCommentPreview(URL.createObjectURL(file));
+  };
+
+  const handleTaskCommentPaste = (e: React.ClipboardEvent<HTMLElement>) => {
+    const files = Array.from(e.clipboardData.files ?? []);
+    const item = Array.from(e.clipboardData.items).find(
+      (i) => i.kind === 'file' && i.type.startsWith('image/')
+    );
+    const pasted = files.find((f) => f.type.startsWith('image/')) ?? item?.getAsFile();
+    if (!pasted) return;
+    e.preventDefault();
+    const ext = (pasted.type.split('/')[1] ?? 'png').replace('jpeg', 'jpg');
+    const named = /\.[a-z0-9]+$/i.test(pasted.name)
+      ? pasted
+      : new File([pasted], `pasted-image-${Date.now()}.${ext}`, { type: pasted.type });
+    applyTaskCommentFile(named);
+  };
+
   const taskMentionCandidates = members.filter((m) => {
     const q = (mentionQuery ?? '').toLowerCase();
     return (m.full_name ?? '').toLowerCase().includes(q) || m.email.toLowerCase().includes(q);
@@ -516,7 +550,10 @@ function VersionDetailContent() {
 
       {/* New Task modal */}
       <Dialog open={taskModalOpen} onOpenChange={setTaskModalOpen}>
-        <DialogContent className="max-w-lg max-h-[85dvh] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden">
+        <DialogContent
+          className="max-w-lg max-h-[85dvh] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden"
+          onPaste={handleTaskCommentPaste}
+        >
           <DialogHeader>
             <DialogTitle>New Task in {version.name}</DialogTitle>
           </DialogHeader>
@@ -559,6 +596,7 @@ function VersionDetailContent() {
                     size="icon"
                     className="absolute -top-2 -right-2 h-6 w-6"
                     onClick={() => {
+                      if (taskCommentPreview) URL.revokeObjectURL(taskCommentPreview);
                       setTaskCommentFile(null);
                       setTaskCommentPreview(null);
                     }}
@@ -574,7 +612,7 @@ function VersionDetailContent() {
                   onChange={(e) => handleTaskCommentChange(e.target.value)}
                   onKeyDown={handleTaskCommentKeyDown}
                   rows={3}
-                  placeholder="Add a comment... use @ to mention someone (optional)"
+                  placeholder="Add a comment... paste an image or use @ to mention someone (optional)"
                 />
                 {mentionOpen && taskMentionCandidates.length > 0 && (
                   <div className="absolute bottom-full mb-2 w-72 rounded-xl border border-border bg-popover shadow-elevated z-20 overflow-hidden animate-fade-in-scale">
@@ -616,23 +654,7 @@ function VersionDetailContent() {
                   className="hidden"
                   onChange={(e) => {
                     const f = e.target.files?.[0];
-                    if (f) {
-                      const ok =
-                        f.type.startsWith('image/') ||
-                        f.type.startsWith('video/') ||
-                        f.type === 'application/pdf' ||
-                        isMarkdownAttachment(f.type, f.name);
-                      if (!ok) {
-                        toast.error('Only images, videos, PDF and Markdown (.md) files are allowed');
-                        return;
-                      }
-                      if (f.size > 50 * 1024 * 1024) {
-                        toast.error('File too large (max 50 MB)');
-                        return;
-                      }
-                      setTaskCommentFile(f);
-                      setTaskCommentPreview(URL.createObjectURL(f));
-                    }
+                    if (f) applyTaskCommentFile(f);
                     if (taskCommentFileInputRef.current) taskCommentFileInputRef.current.value = '';
                   }}
                 />

@@ -299,6 +299,40 @@ export default function TaskDetailPage() {
     (!!t && (t === 'text/markdown' || t === 'text/x-markdown' || t === 'application/markdown')) ||
     (!!name && /\.(md|markdown)$/i.test(name));
 
+  const applyCommentFile = (file: File) => {
+    const ok =
+      file.type.startsWith('image/') ||
+      file.type.startsWith('video/') ||
+      file.type === 'application/pdf' ||
+      isMarkdownType(file.type, file.name);
+    if (!ok) {
+      toast.error('Only images, videos, PDF and Markdown (.md) files are allowed');
+      return;
+    }
+    if (file.size > 50 * 1024 * 1024) {
+      toast.error('File too large (max 50 MB)');
+      return;
+    }
+    setCommentImage(file);
+    if (commentImagePreview) URL.revokeObjectURL(commentImagePreview);
+    setCommentImagePreview(URL.createObjectURL(file));
+  };
+
+  const handleCommentPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const files = Array.from(e.clipboardData.files ?? []);
+    const item = Array.from(e.clipboardData.items).find(
+      (i) => i.kind === 'file' && i.type.startsWith('image/')
+    );
+    const pasted = files.find((f) => f.type.startsWith('image/')) ?? item?.getAsFile();
+    if (!pasted) return;
+    e.preventDefault();
+    const ext = (pasted.type.split('/')[1] ?? 'png').replace('jpeg', 'jpg');
+    const named = /\.[a-z0-9]+$/i.test(pasted.name)
+      ? pasted
+      : new File([pasted], `pasted-image-${Date.now()}.${ext}`, { type: pasted.type });
+    applyCommentFile(named);
+  };
+
   // --- @mention support ---
   const mentionCandidates = members.filter((m) => {
     const q = (mentionQuery ?? '').toLowerCase();
@@ -1147,7 +1181,7 @@ export default function TaskDetailPage() {
                         variant="destructive"
                         size="icon"
                         className="absolute -top-2 -right-2 h-6 w-6"
-                        onClick={() => { setCommentImage(null); setCommentImagePreview(null); }}
+                        onClick={() => { if (commentImagePreview) URL.revokeObjectURL(commentImagePreview); setCommentImage(null); setCommentImagePreview(null); }}
                       >
                         <X className="h-3 w-3" />
                       </Button>
@@ -1156,10 +1190,11 @@ export default function TaskDetailPage() {
                   <div className="relative">
                     <Textarea
                       ref={commentTextareaRef}
-                      placeholder="Write a comment... use @ to mention someone"
+                      placeholder="Write a comment... paste an image or use @ to mention someone"
                       value={newComment}
                       onChange={(e) => handleMentionChange(e.target.value, 'comment', commentTextareaRef, newComment, setNewComment, setMentionQuery, setMentionIndex, setMentionOpen)}
                       onKeyDown={(e) => handleMentionKeyDown(e, 'comment', mentionOpen, mentionCandidates, mentionIndex, setMentionIndex, setMentionOpen, (m) => insertMention(m, 'comment', commentTextareaRef, newComment, setNewComment, setMentionOpen, setMentionQuery), addComment)}
+                      onPaste={handleCommentPaste}
                       rows={3}
                     />
                     {mentionOpen && mentionCandidates.length > 0 && (
@@ -1200,23 +1235,7 @@ export default function TaskDetailPage() {
                         className="hidden"
                         onChange={(e) => {
                           const f = e.target.files?.[0];
-                          if (f) {
-                            const ok =
-                              f.type.startsWith('image/') ||
-                              f.type.startsWith('video/') ||
-                              f.type === 'application/pdf' ||
-                              isMarkdownType(f.type, f.name);
-                            if (!ok) {
-                              toast.error('Only images, videos, PDF and Markdown (.md) files are allowed');
-                              return;
-                            }
-                            if (f.size > 50 * 1024 * 1024) {
-                              toast.error('File too large (max 50 MB)');
-                              return;
-                            }
-                            setCommentImage(f);
-                            setCommentImagePreview(URL.createObjectURL(f));
-                          }
+                          if (f) applyCommentFile(f);
                           if (commentImageInputRef.current) commentImageInputRef.current.value = '';
                         }}
                       />
