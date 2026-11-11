@@ -112,8 +112,7 @@ function VersionDetailContent() {
   const [taskAssigneeOpen, setTaskAssigneeOpen] = useState(false);
   const [taskDueDate, setTaskDueDate] = useState('');
   const [taskCreating, setTaskCreating] = useState(false);
-  const [taskCommentFile, setTaskCommentFile] = useState<File | null>(null);
-  const [taskCommentPreview, setTaskCommentPreview] = useState<string | null>(null);
+  const [taskCommentFiles, setTaskCommentFiles] = useState<{ file: File; url: string }[]>([]);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [mentionIndex, setMentionIndex] = useState(0);
   const [mentionOpen, setMentionOpen] = useState(false);
@@ -248,38 +247,54 @@ function VersionDetailContent() {
   const isMarkdownAttachment = (t: string, name: string) =>
     t === 'text/markdown' || t === 'text/x-markdown' || t === 'application/markdown' || /\.(md|markdown)$/i.test(name);
 
-  const applyTaskCommentFile = (file: File) => {
-    const ok =
-      file.type.startsWith('image/') ||
-      file.type.startsWith('video/') ||
-      file.type === 'application/pdf' ||
-      isMarkdownAttachment(file.type, file.name);
-    if (!ok) {
-      toast.error('Only images, videos, PDF and Markdown (.md) files are allowed');
-      return;
+  const applyTaskCommentFiles = (files: File[]) => {
+    const accepted: { file: File; url: string }[] = [];
+    for (const file of files) {
+      const ok =
+        file.type.startsWith('image/') ||
+        file.type.startsWith('video/') ||
+        file.type === 'application/pdf' ||
+        isMarkdownAttachment(file.type, file.name);
+      if (!ok) {
+        toast.error(`${file.name}: only images, videos, PDF and Markdown (.md) files are allowed`);
+        continue;
+      }
+      if (file.size > 50 * 1024 * 1024) {
+        toast.error(`${file.name} is too large (max 50 MB)`);
+        continue;
+      }
+      accepted.push({ file, url: URL.createObjectURL(file) });
     }
-    if (file.size > 50 * 1024 * 1024) {
-      toast.error('File too large (max 50 MB)');
-      return;
-    }
-    setTaskCommentFile(file);
-    if (taskCommentPreview) URL.revokeObjectURL(taskCommentPreview);
-    setTaskCommentPreview(URL.createObjectURL(file));
+    if (accepted.length) setTaskCommentFiles((prev) => [...prev, ...accepted]);
+  };
+
+  const removeTaskCommentFile = (index: number) => {
+    const target = taskCommentFiles[index];
+    if (target) URL.revokeObjectURL(target.url);
+    setTaskCommentFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const clearTaskCommentFiles = () => {
+    taskCommentFiles.forEach((attachment) => URL.revokeObjectURL(attachment.url));
+    setTaskCommentFiles([]);
   };
 
   const handleTaskCommentPaste = (e: React.ClipboardEvent<HTMLElement>) => {
-    const files = Array.from(e.clipboardData.files ?? []);
-    const item = Array.from(e.clipboardData.items).find(
-      (i) => i.kind === 'file' && i.type.startsWith('image/')
-    );
-    const pasted = files.find((f) => f.type.startsWith('image/')) ?? item?.getAsFile();
-    if (!pasted) return;
+    let files = Array.from(e.clipboardData.files ?? []).filter((f) => f.type.startsWith('image/'));
+    if (!files.length) {
+      files = Array.from(e.clipboardData.items)
+        .filter((i) => i.kind === 'file' && i.type.startsWith('image/'))
+        .map((i) => i.getAsFile())
+        .filter((f): f is File => !!f);
+    }
+    if (!files.length) return;
     e.preventDefault();
-    const ext = (pasted.type.split('/')[1] ?? 'png').replace('jpeg', 'jpg');
-    const named = /\.[a-z0-9]+$/i.test(pasted.name)
-      ? pasted
-      : new File([pasted], `pasted-image-${Date.now()}.${ext}`, { type: pasted.type });
-    applyTaskCommentFile(named);
+    const named = files.map((file, index) => {
+      if (/\.[a-z0-9]+$/i.test(file.name)) return file;
+      const ext = (file.type.split('/')[1] ?? 'png').replace('jpeg', 'jpg');
+      return new File([file], `pasted-image-${Date.now()}-${index}.${ext}`, { type: file.type });
+    });
+    applyTaskCommentFiles(named);
   };
 
   const taskMentionCandidates = members.filter((m: any) => {
@@ -380,33 +395,48 @@ function VersionDetailContent() {
 
     try {
       const commentText = taskComment.trim();
-      if (commentText || taskCommentFile) {
-        let imagePath: string | null = null;
-        let fileType: string | null = null;
-        let fileName: string | null = null;
-        if (taskCommentFile) {
-          const ext = taskCommentFile.name.split('.').pop() ?? 'png';
-          fileType = taskCommentFile.type || (isMarkdownAttachment('', taskCommentFile.name) ? 'text/markdown' : null);
-          fileName = taskCommentFile.name;
+      const attachments = taskCommentFiles.map((attachment) => attachment.file);
+      const attachmentLabel = attachments.length > 1 ? 'Sent attachments' : 'Sent an attachment';
+      if (commentText || attachments.length > 0) {
+        const uploaded: { path: string; type: string | null; name: string }[] = [];
+        for (const file of attachments) {
+          const ext = file.name.split('.').pop() ?? 'png';
+          const fileType = file.type || (isMarkdownAttachment('', file.name) ? 'text/markdown' : null);
           const storageName = `${project.id}/${data.id}/comments/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
           const { error: uploadError } = await supabase.storage
             .from('task-screenshots')
-            .upload(storageName, taskCommentFile, {
+            .upload(storageName, file, {
               contentType: fileType ?? undefined,
               cacheControl: '3600',
             });
           if (uploadError) throw uploadError;
-          imagePath = storageName;
+          uploaded.push({ path: storageName, type: fileType, name: file.name });
         }
-        const { error: commentErr } = await supabase.from('comments').insert({
-          task_id: data.id,
-          user_id: user.id,
-          message: commentText || 'Attachment',
-          image_path: imagePath,
-          file_type: fileType,
-          file_name: fileName,
-        });
-        if (commentErr) throw commentErr;
+
+        if (uploaded.length === 0) {
+          const { error: commentErr } = await supabase.from('comments').insert({
+            task_id: data.id,
+            user_id: user.id,
+            message: commentText,
+            image_path: null,
+            file_type: null,
+            file_name: null,
+          });
+          if (commentErr) throw commentErr;
+        } else {
+          for (let i = 0; i < uploaded.length; i += 1) {
+            const attachment = uploaded[i];
+            const { error: commentErr } = await supabase.from('comments').insert({
+              task_id: data.id,
+              user_id: user.id,
+              message: i === 0 ? commentText || 'Attachment' : 'Attachment',
+              image_path: attachment.path,
+              file_type: attachment.type,
+              file_name: attachment.name,
+            });
+            if (commentErr) throw commentErr;
+          }
+        }
 
         const projectSuffix = ` · ${project.name}`;
         const mentioned = members.filter(
@@ -420,17 +450,17 @@ function VersionDetailContent() {
             project_id: project.id,
             type: 'mention',
             title,
-            body: commentText.slice(0, 100) || 'Sent an attachment',
+            body: commentText.slice(0, 100) || attachmentLabel,
             link: `/app/tasks/${data.number}`,
             priority: taskPriority,
           });
           sendNotificationEmail(
             m.email,
             title,
-            commentText.slice(0, 200) || 'Sent an attachment',
+            commentText.slice(0, 200) || attachmentLabel,
             `${window.location.origin}/app/tasks/${data.number}`
           );
-          sendPushToUser(m.id, title, commentText.slice(0, 100) || 'Sent an attachment', `/app/tasks/${data.number}`);
+          sendPushToUser(m.id, title, commentText.slice(0, 100) || attachmentLabel, `/app/tasks/${data.number}`);
         }
       }
 
@@ -465,8 +495,7 @@ function VersionDetailContent() {
       setTaskModalOpen(false);
       setTaskTitle('');
       setTaskComment('');
-      setTaskCommentFile(null);
-      setTaskCommentPreview(null);
+      clearTaskCommentFiles();
       setMentionOpen(false);
       setMentionQuery(null);
       setTaskType('task');
@@ -569,40 +598,40 @@ function VersionDetailContent() {
             </div>
             <div className="space-y-2 min-w-0">
               <label className="text-sm font-medium block">Comment</label>
-              {taskCommentPreview && taskCommentFile && (
-                <div className="relative inline-block max-w-full">
-                  {isImageAttachment(taskCommentFile.type) ? (
-                    <img
-                      src={taskCommentPreview}
-                      alt="Attached"
-                      className="h-24 w-24 object-cover rounded-lg border border-border"
-                    />
-                  ) : isVideoAttachment(taskCommentFile.type) ? (
-                    <video
-                      src={taskCommentPreview}
-                      className="h-28 rounded-lg border border-border"
-                      controls
-                      muted
-                    />
-                  ) : (
-                    <div className="flex items-center gap-2 rounded-lg border border-border bg-secondary/50 px-3 py-2">
-                      <FileIcon className="h-8 w-8 text-muted-foreground shrink-0" />
-                      <span className="text-sm font-medium truncate min-w-0 max-w-[200px]">{taskCommentFile.name}</span>
+              {taskCommentFiles.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {taskCommentFiles.map((attachment, index) => (
+                    <div key={`${attachment.file.name}-${index}`} className="relative max-w-full">
+                      {isImageAttachment(attachment.file.type) ? (
+                        <img
+                          src={attachment.url}
+                          alt={attachment.file.name}
+                          className="h-24 w-24 object-cover rounded-lg border border-border"
+                        />
+                      ) : isVideoAttachment(attachment.file.type) ? (
+                        <video
+                          src={attachment.url}
+                          className="h-28 rounded-lg border border-border"
+                          controls
+                          muted
+                        />
+                      ) : (
+                        <div className="flex items-center gap-2 rounded-lg border border-border bg-secondary/50 px-3 py-2">
+                          <FileIcon className="h-8 w-8 text-muted-foreground shrink-0" />
+                          <span className="text-sm font-medium truncate min-w-0 max-w-[200px]">{attachment.file.name}</span>
+                        </div>
+                      )}
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="icon"
+                        className="absolute -top-2 -right-2 h-6 w-6"
+                        onClick={() => removeTaskCommentFile(index)}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
                     </div>
-                  )}
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    size="icon"
-                    className="absolute -top-2 -right-2 h-6 w-6"
-                    onClick={() => {
-                      if (taskCommentPreview) URL.revokeObjectURL(taskCommentPreview);
-                      setTaskCommentFile(null);
-                      setTaskCommentPreview(null);
-                    }}
-                  >
-                    <X className="h-3 w-3" />
-                  </Button>
+                  ))}
                 </div>
               )}
               <div className="relative">
@@ -650,11 +679,12 @@ function VersionDetailContent() {
                 <input
                   ref={taskCommentFileInputRef}
                   type="file"
+                  multiple
                   accept="image/*,video/*,application/pdf,.md,.markdown,text/markdown"
                   className="hidden"
                   onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) applyTaskCommentFile(f);
+                    const files = Array.from(e.target.files ?? []);
+                    if (files.length) applyTaskCommentFiles(files);
                     if (taskCommentFileInputRef.current) taskCommentFileInputRef.current.value = '';
                   }}
                 />
@@ -667,8 +697,10 @@ function VersionDetailContent() {
                   <FileIcon className="h-4 w-4 mr-2" />
                   Attach
                 </Button>
-                {taskCommentFile && (
-                  <span className="text-xs text-muted-foreground truncate min-w-0 flex-1">{taskCommentFile.name}</span>
+                {taskCommentFiles.length > 0 && (
+                  <span className="text-xs text-muted-foreground truncate min-w-0 flex-1">
+                    {taskCommentFiles.length} file{taskCommentFiles.length === 1 ? '' : 's'} attached
+                  </span>
                 )}
               </div>
             </div>

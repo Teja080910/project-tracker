@@ -90,8 +90,7 @@ export default function TaskDetailPage() {
   const [newComment, setNewComment] = useState('');
   const [commentLoading, setCommentLoading] = useState(false);
   const [imageUploading, setImageUploading] = useState(false);
-  const [commentImage, setCommentImage] = useState<File | null>(null);
-  const [commentImagePreview, setCommentImagePreview] = useState<string | null>(null);
+  const [commentFiles, setCommentFiles] = useState<{ file: File; url: string }[]>([]);
   const [previewFile, setPreviewFile] = useState<{ url: string; type: string } | null>(null);
   const [imageScale, setImageScale] = useState(1);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
@@ -299,38 +298,54 @@ export default function TaskDetailPage() {
     (!!t && (t === 'text/markdown' || t === 'text/x-markdown' || t === 'application/markdown')) ||
     (!!name && /\.(md|markdown)$/i.test(name));
 
-  const applyCommentFile = (file: File) => {
-    const ok =
-      file.type.startsWith('image/') ||
-      file.type.startsWith('video/') ||
-      file.type === 'application/pdf' ||
-      isMarkdownType(file.type, file.name);
-    if (!ok) {
-      toast.error('Only images, videos, PDF and Markdown (.md) files are allowed');
-      return;
+  const applyCommentFiles = (files: File[]) => {
+    const accepted: { file: File; url: string }[] = [];
+    for (const file of files) {
+      const ok =
+        file.type.startsWith('image/') ||
+        file.type.startsWith('video/') ||
+        file.type === 'application/pdf' ||
+        isMarkdownType(file.type, file.name);
+      if (!ok) {
+        toast.error(`${file.name}: only images, videos, PDF and Markdown (.md) files are allowed`);
+        continue;
+      }
+      if (file.size > 50 * 1024 * 1024) {
+        toast.error(`${file.name} is too large (max 50 MB)`);
+        continue;
+      }
+      accepted.push({ file, url: URL.createObjectURL(file) });
     }
-    if (file.size > 50 * 1024 * 1024) {
-      toast.error('File too large (max 50 MB)');
-      return;
-    }
-    setCommentImage(file);
-    if (commentImagePreview) URL.revokeObjectURL(commentImagePreview);
-    setCommentImagePreview(URL.createObjectURL(file));
+    if (accepted.length) setCommentFiles((prev) => [...prev, ...accepted]);
+  };
+
+  const removeCommentFile = (index: number) => {
+    const target = commentFiles[index];
+    if (target) URL.revokeObjectURL(target.url);
+    setCommentFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const clearCommentFiles = () => {
+    commentFiles.forEach((attachment) => URL.revokeObjectURL(attachment.url));
+    setCommentFiles([]);
   };
 
   const handleCommentPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
-    const files = Array.from(e.clipboardData.files ?? []);
-    const item = Array.from(e.clipboardData.items).find(
-      (i) => i.kind === 'file' && i.type.startsWith('image/')
-    );
-    const pasted = files.find((f) => f.type.startsWith('image/')) ?? item?.getAsFile();
-    if (!pasted) return;
+    let files = Array.from(e.clipboardData.files ?? []).filter((f) => f.type.startsWith('image/'));
+    if (!files.length) {
+      files = Array.from(e.clipboardData.items)
+        .filter((i) => i.kind === 'file' && i.type.startsWith('image/'))
+        .map((i) => i.getAsFile())
+        .filter((f): f is File => !!f);
+    }
+    if (!files.length) return;
     e.preventDefault();
-    const ext = (pasted.type.split('/')[1] ?? 'png').replace('jpeg', 'jpg');
-    const named = /\.[a-z0-9]+$/i.test(pasted.name)
-      ? pasted
-      : new File([pasted], `pasted-image-${Date.now()}.${ext}`, { type: pasted.type });
-    applyCommentFile(named);
+    const named = files.map((file, index) => {
+      if (/\.[a-z0-9]+$/i.test(file.name)) return file;
+      const ext = (file.type.split('/')[1] ?? 'png').replace('jpeg', 'jpg');
+      return new File([file], `pasted-image-${Date.now()}-${index}.${ext}`, { type: file.type });
+    });
+    applyCommentFiles(named);
   };
 
   // --- @mention support ---
@@ -498,46 +513,67 @@ export default function TaskDetailPage() {
   };
 
   const addComment = async () => {
-    if ((!newComment.trim() && !commentImage) || !user || !task) return;
+    const files = commentFiles.map((attachment) => attachment.file);
+    if ((!newComment.trim() && files.length === 0) || !user || !task) return;
     setCommentLoading(true);
 
-    let imagePath: string | null = null;
-    let fileType: string | null = null;
-    let fileName: string | null = null;
-    if (commentImage) {
+    const commentText = newComment.trim();
+    const attachmentLabel = files.length > 1 ? 'Sent attachments' : 'Sent an image';
+    const uploaded: { path: string; type: string | null; name: string }[] = [];
+    if (files.length > 0) {
       setImageUploading(true);
-      const ext = commentImage.name.split('.').pop() ?? 'png';
-      fileType = commentImage.type || (isMarkdownType(null, commentImage.name) ? 'text/markdown' : null);
-      fileName = commentImage.name;
-      const storageName = `${task.project_id}/${taskId}/comments/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-      const { error: uploadError } = await supabase.storage
-        .from('task-screenshots')
-        .upload(storageName, commentImage, {
-          contentType: fileType ?? undefined,
-          cacheControl: '3600',
-        });
+      for (const file of files) {
+        const ext = file.name.split('.').pop() ?? 'png';
+        const fileType = file.type || (isMarkdownType(null, file.name) ? 'text/markdown' : null);
+        const storageName = `${task.project_id}/${taskId}/comments/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+        const { error: uploadError } = await supabase.storage
+          .from('task-screenshots')
+          .upload(storageName, file, {
+            contentType: fileType ?? undefined,
+            cacheControl: '3600',
+          });
+        if (uploadError) {
+          setImageUploading(false);
+          toast.error(uploadError.message);
+          setCommentLoading(false);
+          return;
+        }
+        uploaded.push({ path: storageName, type: fileType, name: file.name });
+      }
       setImageUploading(false);
-      if (uploadError) {
-        toast.error(uploadError.message);
+    }
+
+    if (uploaded.length === 0) {
+      const { error } = await supabase.from('comments').insert({
+        task_id: taskId,
+        user_id: user.id,
+        message: commentText,
+        image_path: null,
+        file_type: null,
+        file_name: null,
+      });
+      if (error) {
+        toast.error(error.message);
         setCommentLoading(false);
         return;
       }
-      imagePath = storageName;
-    }
-
-    const { error } = await supabase.from('comments').insert({
-      task_id: taskId,
-      user_id: user.id,
-      message: newComment.trim() || 'Attachment',
-      image_path: imagePath,
-      file_type: fileType,
-      file_name: fileName,
-    });
-
-    if (error) {
-      toast.error(error.message);
-      setCommentLoading(false);
-      return;
+    } else {
+      for (let i = 0; i < uploaded.length; i += 1) {
+        const attachment = uploaded[i];
+        const { error } = await supabase.from('comments').insert({
+          task_id: taskId,
+          user_id: user.id,
+          message: i === 0 ? commentText || 'Attachment' : 'Attachment',
+          image_path: attachment.path,
+          file_type: attachment.type,
+          file_name: attachment.name,
+        });
+        if (error) {
+          toast.error(error.message);
+          setCommentLoading(false);
+          return;
+        }
+      }
     }
 
     try {
@@ -550,7 +586,6 @@ export default function TaskDetailPage() {
       });
       if (logErr) throw logErr;
 
-      const commentText = newComment.trim();
       const projectSuffix = task.project?.name ? ` · ${task.project.name}` : '';
       const notifBase = {
         actor_id: user.id,
@@ -570,19 +605,19 @@ export default function TaskDetailPage() {
           user_id: m.id,
           type: 'mention',
           title: `${profile?.full_name ?? profile?.email} mentioned you in #${task.number}${projectSuffix}`,
-          body: commentText.slice(0, 100) || 'Sent an image',
+          body: commentText.slice(0, 100) || attachmentLabel,
         });
         if (notifErr) throw notifErr;
         sendNotificationEmail(
           m.email,
           `${profile?.full_name ?? profile?.email} mentioned you in #${task.number}${projectSuffix}`,
-          commentText.slice(0, 200) || 'Sent an image',
+          commentText.slice(0, 200) || attachmentLabel,
           `${window.location.origin}${notifBase.link}`
         );
         sendPushToUser(
           m.id,
           `${profile?.full_name ?? profile?.email} mentioned you in #${task.number}${projectSuffix}`,
-          commentText.slice(0, 100) || 'Sent an image',
+          commentText.slice(0, 100) || attachmentLabel,
           notifBase.link
         );
       }
@@ -594,7 +629,7 @@ export default function TaskDetailPage() {
           user_id: task.assignee_id,
           type: 'comment_added',
           title: `New comment on #${task.number}${projectSuffix}`,
-          body: commentText.slice(0, 100) || 'Sent an image',
+          body: commentText.slice(0, 100) || attachmentLabel,
         });
         if (notifErr) throw notifErr;
         const assignee = members.find((m: any) => m.id === task.assignee_id);
@@ -602,21 +637,20 @@ export default function TaskDetailPage() {
           sendNotificationEmail(
             assignee.email,
             `New comment on #${task.number}${projectSuffix}`,
-            commentText.slice(0, 200) || 'Sent an image',
+            commentText.slice(0, 200) || attachmentLabel,
             `${window.location.origin}${notifBase.link}`
           );
         }
         sendPushToUser(
           task.assignee_id,
           `New comment on #${task.number}${projectSuffix}`,
-          commentText.slice(0, 100) || 'Sent an image',
+          commentText.slice(0, 100) || attachmentLabel,
           notifBase.link
         );
       }
 
       setNewComment('');
-      setCommentImage(null);
-      setCommentImagePreview(null);
+      clearCommentFiles();
       await fetchTask();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to save comment');
@@ -1156,35 +1190,39 @@ export default function TaskDetailPage() {
               <div className="flex gap-3 border-t border-border/60 p-4 shrink-0">
                 <UserAvatar profile={profile} className="h-8 w-8 shrink-0" />
                 <div className="flex-1 space-y-2">
-                  {commentImagePreview && commentImage && (
-                    <div className="relative inline-block max-w-[320px]">
-                      {isImageType(commentImage.type) ? (
-                        <img
-                          src={commentImagePreview}
-                          alt="Attached"
-                          className="h-24 w-24 object-cover rounded-lg border border-border"
-                        />
-                      ) : isVideoType(commentImage.type) ? (
-                        <video
-                          src={commentImagePreview}
-                          className="h-28 rounded-lg border border-border"
-                          controls
-                          muted
-                        />
-                      ) : (
-                        <div className="flex items-center gap-2 rounded-lg border border-border bg-secondary/50 px-3 py-2">
-                          <FileIcon className="h-8 w-8 text-muted-foreground shrink-0" />
-                          <span className="text-sm font-medium truncate max-w-[200px]">{commentImage.name}</span>
+                  {commentFiles.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {commentFiles.map((attachment, index) => (
+                        <div key={`${attachment.file.name}-${index}`} className="relative max-w-[320px]">
+                          {isImageType(attachment.file.type) ? (
+                            <img
+                              src={attachment.url}
+                              alt={attachment.file.name}
+                              className="h-24 w-24 object-cover rounded-lg border border-border"
+                            />
+                          ) : isVideoType(attachment.file.type) ? (
+                            <video
+                              src={attachment.url}
+                              className="h-28 rounded-lg border border-border"
+                              controls
+                              muted
+                            />
+                          ) : (
+                            <div className="flex items-center gap-2 rounded-lg border border-border bg-secondary/50 px-3 py-2">
+                              <FileIcon className="h-8 w-8 text-muted-foreground shrink-0" />
+                              <span className="text-sm font-medium truncate max-w-[200px]">{attachment.file.name}</span>
+                            </div>
+                          )}
+                          <Button
+                            variant="destructive"
+                            size="icon"
+                            className="absolute -top-2 -right-2 h-6 w-6"
+                            onClick={() => removeCommentFile(index)}
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
                         </div>
-                      )}
-                      <Button
-                        variant="destructive"
-                        size="icon"
-                        className="absolute -top-2 -right-2 h-6 w-6"
-                        onClick={() => { if (commentImagePreview) URL.revokeObjectURL(commentImagePreview); setCommentImage(null); setCommentImagePreview(null); }}
-                      >
-                        <X className="h-3 w-3" />
-                      </Button>
+                      ))}
                     </div>
                   )}
                   <div className="relative">
@@ -1231,11 +1269,12 @@ export default function TaskDetailPage() {
                       <input
                         ref={commentImageInputRef}
                         type="file"
+                        multiple
                         accept="image/*,video/*,application/pdf,.md,.markdown,text/markdown"
                         className="hidden"
                         onChange={(e) => {
-                          const f = e.target.files?.[0];
-                          if (f) applyCommentFile(f);
+                          const files = Array.from(e.target.files ?? []);
+                          if (files.length) applyCommentFiles(files);
                           if (commentImageInputRef.current) commentImageInputRef.current.value = '';
                         }}
                       />
@@ -1256,7 +1295,7 @@ export default function TaskDetailPage() {
                     <Button
                       size="sm"
                       onClick={addComment}
-                      disabled={(!newComment.trim() && !commentImage) || commentLoading || imageUploading}
+                      disabled={(!newComment.trim() && commentFiles.length === 0) || commentLoading || imageUploading}
                     >
                       {commentLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}
                       Send
