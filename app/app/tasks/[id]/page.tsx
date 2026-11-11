@@ -291,6 +291,28 @@ export default function TaskDetailPage() {
     return data.publicUrl;
   };
 
+  const getCommentAttachments = (comment: Comment) => {
+    if (!comment.image_path) return [];
+    if (comment.image_path.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(comment.image_path) as unknown;
+        if (Array.isArray(parsed)) {
+          return parsed
+            .filter((item): item is Record<string, unknown> => !!item && typeof item === 'object')
+            .map((item) => ({
+              path: String(item.path ?? ''),
+              type: typeof item.type === 'string' ? item.type : null,
+              name: typeof item.name === 'string' ? item.name : null,
+            }))
+            .filter((item) => item.path);
+        }
+      } catch {
+        // fall through and treat as a single attachment path
+      }
+    }
+    return [{ path: comment.image_path, type: comment.file_type, name: comment.file_name }];
+  };
+
   const isImageType = (t: string | null) => !!t && t.startsWith('image/');
   const isVideoType = (t: string | null) => !!t && t.startsWith('video/');
   const isPdfType = (t: string | null) => t === 'application/pdf';
@@ -543,37 +565,24 @@ export default function TaskDetailPage() {
       setImageUploading(false);
     }
 
-    if (uploaded.length === 0) {
-      const { error } = await supabase.from('comments').insert({
-        task_id: taskId,
-        user_id: user.id,
-        message: commentText,
-        image_path: null,
-        file_type: null,
-        file_name: null,
-      });
-      if (error) {
-        toast.error(error.message);
-        setCommentLoading(false);
-        return;
-      }
-    } else {
-      for (let i = 0; i < uploaded.length; i += 1) {
-        const attachment = uploaded[i];
-        const { error } = await supabase.from('comments').insert({
-          task_id: taskId,
-          user_id: user.id,
-          message: i === 0 ? commentText || 'Attachment' : 'Attachment',
-          image_path: attachment.path,
-          file_type: attachment.type,
-          file_name: attachment.name,
-        });
-        if (error) {
-          toast.error(error.message);
-          setCommentLoading(false);
-          return;
-        }
-      }
+    const singleAttachment = uploaded.length === 1 ? uploaded[0] : null;
+    const { error } = await supabase.from('comments').insert({
+      task_id: taskId,
+      user_id: user.id,
+      message: uploaded.length === 0 ? commentText : commentText || 'Attachment',
+      image_path:
+        uploaded.length === 0
+          ? null
+          : uploaded.length === 1
+            ? uploaded[0].path
+            : JSON.stringify(uploaded),
+      file_type: singleAttachment?.type ?? null,
+      file_name: singleAttachment?.name ?? null,
+    });
+    if (error) {
+      toast.error(error.message);
+      setCommentLoading(false);
+      return;
     }
 
     try {
@@ -967,6 +976,8 @@ export default function TaskDetailPage() {
                         acc[r.emoji] = { count: prev.count + 1, mine: prev.mine || r.user_id === user?.id };
                         return acc;
                       }, {});
+                    const commentAttachments = getCommentAttachments(comment);
+                    const hasMultipleAttachments = commentAttachments.length > 1;
                     return (
                       <div key={comment.id} className={`flex gap-2.5 ${isMine ? 'flex-row-reverse' : ''}`}>
                         <Tooltip>
@@ -987,57 +998,75 @@ export default function TaskDetailPage() {
                                 : 'bg-secondary/70 text-foreground rounded-tl-sm'
                             }`}
                           >
-                            {comment.image_path && isImageType(comment.file_type) && (
-                              <img
-                                src={getImageUrl(comment.image_path)}
-                                alt="comment"
-                                className="rounded-lg mb-2 max-h-48 w-auto cursor-pointer"
-                                onClick={() => setPreviewFile({ url: getImageUrl(comment.image_path!), type: 'image' })}
-                              />
-                            )}
-                            {comment.image_path && isVideoType(comment.file_type) && (
-                              <video
-                                src={getImageUrl(comment.image_path)}
-                                className="rounded-lg mb-2 max-h-64 w-auto cursor-pointer"
-                                controls
-                                preload="metadata"
-                                onClick={() => setPreviewFile({ url: getImageUrl(comment.image_path!), type: 'video' })}
-                              />
-                            )}
-                            {comment.image_path && isPdfType(comment.file_type) && (
-                              <button
-                                type="button"
-                                className="flex items-center gap-2 rounded-lg border border-border/60 bg-card/50 px-3 py-2 mb-2 w-full text-left hover:bg-accent/50 transition-colors"
-                                onClick={() => setPreviewFile({ url: getImageUrl(comment.image_path!), type: 'pdf' })}
-                              >
-                                <FileIcon className="h-6 w-6 text-primary shrink-0" />
-                                <span className="flex flex-col min-w-0">
-                                  <span className="text-sm font-medium truncate">{comment.file_name ?? 'document.pdf'}</span>
-                                  <span className="text-[11px] text-muted-foreground">PDF document — click to view</span>
-                                </span>
-                              </button>
-                            )}
-                            {comment.image_path && !isImageType(comment.file_type) && !isVideoType(comment.file_type) && !isPdfType(comment.file_type) && (
-                              <a
-                                href={getImageUrl(comment.image_path)}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex items-center gap-2 rounded-lg border border-border/60 bg-card/50 px-3 py-2 mb-2 w-full text-left hover:bg-accent/50 transition-colors"
-                              >
-                                <FileIcon className="h-6 w-6 text-primary shrink-0" />
-                                <span className="flex flex-col min-w-0">
-                                  <span className="text-sm font-medium truncate">{comment.file_name ?? 'Attachment'}</span>
-                                  <span className="text-[11px] text-muted-foreground">Click to download</span>
-                                </span>
-                              </a>
-                            )}
-                            {comment.image_path && !comment.file_type && (
-                              <img
-                                src={getImageUrl(comment.image_path)}
-                                alt="comment"
-                                className="rounded-lg mb-2 max-h-48 w-auto cursor-pointer"
-                                onClick={() => setPreviewFile({ url: getImageUrl(comment.image_path!), type: 'image' })}
-                              />
+                            {commentAttachments.length > 0 && (
+                              <div className={hasMultipleAttachments ? 'grid grid-cols-2 gap-2 mb-2' : 'mb-2'}>
+                                {commentAttachments.map((attachment, attachmentIndex) => {
+                                  const attachmentUrl = getImageUrl(attachment.path);
+                                  const key = `${attachment.path}-${attachmentIndex}`;
+                                  if (isImageType(attachment.type) || !attachment.type) {
+                                    return (
+                                      <img
+                                        key={key}
+                                        src={attachmentUrl}
+                                        alt={attachment.name ?? 'comment attachment'}
+                                        className={
+                                          hasMultipleAttachments
+                                            ? 'h-40 w-full rounded-lg object-cover cursor-pointer'
+                                            : 'rounded-lg max-h-48 w-auto cursor-pointer'
+                                        }
+                                        onClick={() => setPreviewFile({ url: attachmentUrl, type: 'image' })}
+                                      />
+                                    );
+                                  }
+                                  if (isVideoType(attachment.type)) {
+                                    return (
+                                      <video
+                                        key={key}
+                                        src={attachmentUrl}
+                                        className={
+                                          hasMultipleAttachments
+                                            ? 'h-40 w-full rounded-lg object-cover cursor-pointer'
+                                            : 'rounded-lg max-h-64 w-auto cursor-pointer'
+                                        }
+                                        controls
+                                        preload="metadata"
+                                        onClick={() => setPreviewFile({ url: attachmentUrl, type: 'video' })}
+                                      />
+                                    );
+                                  }
+                                  if (isPdfType(attachment.type)) {
+                                    return (
+                                      <button
+                                        key={key}
+                                        type="button"
+                                        className="flex items-center gap-2 rounded-lg border border-border/60 bg-card/50 px-3 py-2 w-full text-left hover:bg-accent/50 transition-colors"
+                                        onClick={() => setPreviewFile({ url: attachmentUrl, type: 'pdf' })}
+                                      >
+                                        <FileIcon className="h-6 w-6 text-primary shrink-0" />
+                                        <span className="flex flex-col min-w-0">
+                                          <span className="text-sm font-medium truncate">{attachment.name ?? 'document.pdf'}</span>
+                                          <span className="text-[11px] text-muted-foreground">PDF document — click to view</span>
+                                        </span>
+                                      </button>
+                                    );
+                                  }
+                                  return (
+                                    <a
+                                      key={key}
+                                      href={attachmentUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="flex items-center gap-2 rounded-lg border border-border/60 bg-card/50 px-3 py-2 w-full text-left hover:bg-accent/50 transition-colors"
+                                    >
+                                      <FileIcon className="h-6 w-6 text-primary shrink-0" />
+                                      <span className="flex flex-col min-w-0">
+                                        <span className="text-sm font-medium truncate">{attachment.name ?? 'Attachment'}</span>
+                                        <span className="text-[11px] text-muted-foreground">Click to download</span>
+                                      </span>
+                                    </a>
+                                  );
+                                })}
+                              </div>
                             )}
                             {isEditingThis ? (
                               <div className="space-y-2">
