@@ -1014,7 +1014,7 @@ export default function TaskDetailPage() {
                             {comment.profile?.full_name ?? comment.profile?.email ?? 'Unknown user'}
                           </TooltipContent>
                         </Tooltip>
-                        <div className={`max-w-[75%] min-w-0 ${isMine ? 'items-end' : 'items-start'} flex flex-col`}>
+                        <div className={`${isEditingThis ? 'w-full max-w-full' : 'max-w-[75%]'} min-w-0 ${isMine ? 'items-end' : 'items-start'} flex flex-col`}>
                           <div
                             className={`rounded-2xl px-3.5 py-2.5 text-sm break-words whitespace-pre-wrap ${
                               isMine
@@ -1100,8 +1100,8 @@ export default function TaskDetailPage() {
                                     value={editingCommentText}
                                     onChange={(e) => handleMentionChange(e.target.value, 'edit', editCommentTextareaRef, editingCommentText, setEditingCommentText, setEditMentionQuery, setEditMentionIndex, setEditMentionOpen)}
                                     onKeyDown={(e) => handleMentionKeyDown(e, 'edit', editMentionOpen, editMentionCandidates, editMentionIndex, setEditMentionIndex, setEditMentionOpen, (m) => insertMention(m, 'edit', editCommentTextareaRef, editingCommentText, setEditingCommentText, setEditMentionOpen, setEditMentionQuery), saveCommentEdit)}
-                                    rows={3}
-                                    className="bg-background text-foreground text-sm resize-x max-w-full"
+                                    rows={6}
+                                    className="bg-background text-foreground text-sm resize min-h-[140px] max-w-full"
                                     autoFocus
                                   />
                                   {editMentionOpen && editMentionCandidates.length > 0 && (
