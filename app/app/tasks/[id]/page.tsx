@@ -1014,13 +1014,13 @@ export default function TaskDetailPage() {
                             {comment.profile?.full_name ?? comment.profile?.email ?? 'Unknown user'}
                           </TooltipContent>
                         </Tooltip>
-                        <div className={`${isEditingThis ? 'w-full max-w-full' : 'max-w-[75%]'} min-w-0 ${isMine ? 'items-end' : 'items-start'} flex flex-col`}>
+                        <div className={`${isEditingThis ? 'flex-1 max-w-full' : 'max-w-[75%]'} min-w-0 ${isMine ? 'items-end' : 'items-start'} flex flex-col`}>
                           <div
                             className={`rounded-2xl px-3.5 py-2.5 text-sm break-words whitespace-pre-wrap ${
                               isMine
                                 ? 'bg-primary text-primary-foreground rounded-tr-sm [&_*]:selection:bg-white [&_*]:selection:text-primary selection:bg-white selection:text-primary'
                                 : 'bg-secondary/70 text-foreground rounded-tl-sm'
-                            }`}
+                            } ${isEditingThis ? 'w-full' : ''}`}
                           >
                             {commentAttachments.length > 0 && (
                               <div className={hasMultipleAttachments ? 'grid grid-cols-2 gap-2 mb-2' : 'mb-2'}>
