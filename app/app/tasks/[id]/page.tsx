@@ -67,7 +67,6 @@ import { toast } from 'sonner';
 import type { Task, Comment, CommentReaction, ActivityLog, Profile, Version, Project } from '@/lib/types';
 
 const REACTION_EMOJIS = ['👍', '❤️', '😂', '🎉', '👀', '🙏'];
-type CommentAttachment = { path: string; type: string | null; name: string | null };
 
 export default function TaskDetailPage() {
   const params = useParams();
@@ -104,11 +103,7 @@ export default function TaskDetailPage() {
   const [editTitle, setEditTitle] = useState('');
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editingCommentText, setEditingCommentText] = useState('');
-  const [editingAttachments, setEditingAttachments] = useState<CommentAttachment[]>([]);
-  const [editingNewFiles, setEditingNewFiles] = useState<{ file: File; url: string }[]>([]);
-  const [editingSourceIds, setEditingSourceIds] = useState<string[]>([]);
   const [commentEditLoading, setCommentEditLoading] = useState(false);
-  const [editImageUploading, setEditImageUploading] = useState(false);
   const [deleteTaskOpen, setDeleteTaskOpen] = useState(false);
   const [deleteTaskLoading, setDeleteTaskLoading] = useState(false);
   const [myRole, setMyRole] = useState<string | null>(null);
@@ -119,7 +114,6 @@ export default function TaskDetailPage() {
   const ACTIVITY_PREVIEW_COUNT = 1;
 
   const commentImageInputRef = useRef<HTMLInputElement>(null);
-  const editCommentFileInputRef = useRef<HTMLInputElement>(null);
   const commentTextareaRef = useRef<HTMLTextAreaElement>(null);
   const editCommentTextareaRef = useRef<HTMLTextAreaElement>(null);
   const commentsListRef = useRef<HTMLDivElement>(null);
@@ -297,7 +291,7 @@ export default function TaskDetailPage() {
     return data.publicUrl;
   };
 
-  const getCommentAttachments = (comment: Comment): CommentAttachment[] => {
+  const getCommentAttachments = (comment: Comment) => {
     if (!comment.image_path) return [];
     if (comment.image_path.startsWith('[')) {
       try {
@@ -673,158 +667,25 @@ export default function TaskDetailPage() {
     setCommentLoading(false);
   };
 
-  const clearEditingState = () => {
-    editingNewFiles.forEach((attachment) => URL.revokeObjectURL(attachment.url));
-    setEditingCommentId(null);
-    setEditingCommentText('');
-    setEditingAttachments([]);
-    setEditingNewFiles([]);
-    setEditingSourceIds([]);
-  };
-
-  const startEditingComment = (
-    comment: Comment,
-    attachments: CommentAttachment[],
-    commentIds: string[]
-  ) => {
-    editingNewFiles.forEach((attachment) => URL.revokeObjectURL(attachment.url));
-    const message = comment.message.trim();
-    setEditingCommentId(comment.id);
-    setEditingCommentText(message === 'Attachment' && attachments.length > 0 ? '' : message);
-    setEditingAttachments(attachments);
-    setEditingNewFiles([]);
-    setEditingSourceIds(commentIds);
-  };
-
-  const applyEditingFiles = (files: File[]) => {
-    const accepted: { file: File; url: string }[] = [];
-    for (const file of files) {
-      const ok =
-        file.type.startsWith('image/') ||
-        file.type.startsWith('video/') ||
-        file.type === 'application/pdf' ||
-        isMarkdownType(file.type, file.name);
-      if (!ok) {
-        toast.error(`${file.name}: only images, videos, PDF and Markdown (.md) files are allowed`);
-        continue;
-      }
-      if (file.size > 50 * 1024 * 1024) {
-        toast.error(`${file.name} is too large (max 50 MB)`);
-        continue;
-      }
-      accepted.push({ file, url: URL.createObjectURL(file) });
-    }
-    if (accepted.length) setEditingNewFiles((prev) => [...prev, ...accepted]);
-  };
-
-  const handleEditingPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
-    let files = Array.from(e.clipboardData.files ?? []).filter((f) => f.type.startsWith('image/'));
-    if (!files.length) {
-      files = Array.from(e.clipboardData.items)
-        .filter((i) => i.kind === 'file' && i.type.startsWith('image/'))
-        .map((i) => i.getAsFile())
-        .filter((f): f is File => !!f);
-    }
-    if (!files.length) return;
-    e.preventDefault();
-    const named = files.map((file, index) => {
-      if (/\.[a-z0-9]+$/i.test(file.name)) return file;
-      const ext = (file.type.split('/')[1] ?? 'png').replace('jpeg', 'jpg');
-      return new File([file], `pasted-image-${Date.now()}-${index}.${ext}`, { type: file.type });
-    });
-    applyEditingFiles(named);
-  };
-
-  const removeEditingAttachment = (index: number) => {
-    setEditingAttachments((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  const removeEditingNewFile = (index: number) => {
-    const target = editingNewFiles[index];
-    if (target) URL.revokeObjectURL(target.url);
-    setEditingNewFiles((prev) => prev.filter((_, i) => i !== index));
-  };
-
   const saveCommentEdit = async () => {
-    if (!editingCommentId || !user || !task) return;
-    const commentText = editingCommentText.trim();
-    if (!commentText && editingAttachments.length === 0 && editingNewFiles.length === 0) {
+    if (!editingCommentId || !user) return;
+    if (!editingCommentText.trim()) {
       toast.error('Comment cannot be empty');
       return;
     }
     setCommentEditLoading(true);
-
-    const uploaded: CommentAttachment[] = [];
-    if (editingNewFiles.length > 0) {
-      setEditImageUploading(true);
-      for (const { file } of editingNewFiles) {
-        const ext = file.name.split('.').pop() ?? 'png';
-        const fileType = file.type || (isMarkdownType(null, file.name) ? 'text/markdown' : null);
-        const storageName = `${task.project_id}/${taskId}/comments/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-        const { error: uploadError } = await supabase.storage
-          .from('task-screenshots')
-          .upload(storageName, file, {
-            contentType: fileType ?? undefined,
-            cacheControl: '3600',
-          });
-        if (uploadError) {
-          setEditImageUploading(false);
-          toast.error(uploadError.message);
-          setCommentEditLoading(false);
-          return;
-        }
-        uploaded.push({ path: storageName, type: fileType, name: file.name });
-      }
-      setEditImageUploading(false);
-    }
-
-    const combined = [...editingAttachments, ...uploaded];
-    const keptPaths = new Set(combined.map((attachment) => attachment.path));
-    const removedPaths = editingAttachments
-      .map((attachment) => attachment.path)
-      .filter((path) => !keptPaths.has(path));
-    const singleAttachment = combined.length === 1 ? combined[0] : null;
-
     const { error } = await supabase
       .from('comments')
-      .update({
-        message: commentText || (combined.length > 0 ? 'Attachment' : ''),
-        image_path:
-          combined.length === 0
-            ? null
-            : combined.length === 1
-              ? combined[0].path
-              : JSON.stringify(combined),
-        file_type: singleAttachment?.type ?? null,
-        file_name: singleAttachment?.name ?? null,
-        edited_at: new Date().toISOString(),
-      })
+      .update({ message: editingCommentText.trim(), edited_at: new Date().toISOString() })
       .eq('id', editingCommentId)
       .eq('user_id', user.id);
-
+    setCommentEditLoading(false);
     if (error) {
-      setCommentEditLoading(false);
       toast.error(error.message);
       return;
     }
-
-    // Legacy attachment batches were stored as several comments; merge them into the edited row.
-    const siblingIds = editingSourceIds.filter((id) => id !== editingCommentId);
-    if (siblingIds.length > 0) {
-      const { error: deleteError } = await supabase
-        .from('comments')
-        .delete()
-        .in('id', siblingIds)
-        .eq('user_id', user.id);
-      if (deleteError) toast.error('Comment updated, but old attachment rows could not be removed');
-    }
-
-    if (removedPaths.length > 0) {
-      await supabase.storage.from('task-screenshots').remove(removedPaths);
-    }
-
-    setCommentEditLoading(false);
-    clearEditingState();
+    setEditingCommentId(null);
+    setEditingCommentText('');
     await fetchTask();
     toast.success('Comment updated');
   };
@@ -1013,8 +874,7 @@ export default function TaskDetailPage() {
 
   const commentGroups: {
     comment: Comment;
-    attachments: CommentAttachment[];
-    commentIds: string[];
+    attachments: { path: string; type: string | null; name: string | null }[];
   }[] = [];
 
   for (const comment of comments) {
@@ -1032,13 +892,8 @@ export default function TaskDetailPage() {
       sentCloseTogether
     ) {
       previousGroup.attachments.push(...getCommentAttachments(comment));
-      previousGroup.commentIds.push(comment.id);
     } else {
-      commentGroups.push({
-        comment,
-        attachments: getCommentAttachments(comment),
-        commentIds: [comment.id],
-      });
+      commentGroups.push({ comment, attachments: getCommentAttachments(comment) });
     }
   }
 
@@ -1136,7 +991,7 @@ export default function TaskDetailPage() {
                 </div>
               ) : (
                 <div ref={commentsListRef} className="flex-1 overflow-y-auto px-4 pt-3 space-y-3 min-h-0">
-                  {commentGroups.map(({ comment, attachments: commentAttachments, commentIds }) => {
+                  {commentGroups.map(({ comment, attachments: commentAttachments }) => {
                     const isMine = comment.user_id === user?.id;
                     const isEditingThis = editingCommentId === comment.id;
                     const groupedReactions = reactions
@@ -1180,7 +1035,7 @@ export default function TaskDetailPage() {
                                         alt={attachment.name ?? 'comment attachment'}
                                         className={
                                           hasMultipleAttachments
-                                            ? 'max-h-64 w-full rounded-lg bg-black/10 object-contain cursor-pointer'
+                                            ? 'h-40 w-full rounded-lg object-cover cursor-pointer'
                                             : 'rounded-lg max-h-48 w-auto cursor-pointer'
                                         }
                                         onClick={() => setPreviewFile({ url: attachmentUrl, type: 'image' })}
@@ -1194,7 +1049,7 @@ export default function TaskDetailPage() {
                                         src={attachmentUrl}
                                         className={
                                           hasMultipleAttachments
-                                            ? 'max-h-64 w-full rounded-lg bg-black/10 cursor-pointer'
+                                            ? 'h-40 w-full rounded-lg object-cover cursor-pointer'
                                             : 'rounded-lg max-h-64 w-auto cursor-pointer'
                                         }
                                         controls
@@ -1239,69 +1094,14 @@ export default function TaskDetailPage() {
                             )}
                             {isEditingThis ? (
                               <div className="space-y-2">
-                                {(editingAttachments.length > 0 || editingNewFiles.length > 0) && (
-                                  <div className="flex flex-wrap gap-2">
-                                    {editingAttachments.map((attachment, index) => (
-                                      <div key={`${attachment.path}-${index}`} className="relative">
-                                        {isImageType(attachment.type) || !attachment.type ? (
-                                          <img
-                                            src={getImageUrl(attachment.path)}
-                                            alt={attachment.name ?? 'attachment'}
-                                            className="h-20 w-20 rounded-lg border border-border object-cover"
-                                          />
-                                        ) : (
-                                          <div className="flex items-center gap-2 rounded-lg border border-border bg-secondary/50 px-2 py-1.5">
-                                            <FileIcon className="h-5 w-5 text-muted-foreground shrink-0" />
-                                            <span className="text-xs truncate max-w-[140px]">{attachment.name ?? 'Attachment'}</span>
-                                          </div>
-                                        )}
-                                        <Button
-                                          type="button"
-                                          variant="destructive"
-                                          size="icon"
-                                          className="absolute -top-2 -right-2 h-5 w-5"
-                                          onClick={() => removeEditingAttachment(index)}
-                                        >
-                                          <X className="h-3 w-3" />
-                                        </Button>
-                                      </div>
-                                    ))}
-                                    {editingNewFiles.map((attachment, index) => (
-                                      <div key={attachment.url} className="relative">
-                                        {isImageType(attachment.file.type) ? (
-                                          <img
-                                            src={attachment.url}
-                                            alt={attachment.file.name}
-                                            className="h-20 w-20 rounded-lg border border-border object-cover"
-                                          />
-                                        ) : (
-                                          <div className="flex items-center gap-2 rounded-lg border border-border bg-secondary/50 px-2 py-1.5">
-                                            <FileIcon className="h-5 w-5 text-muted-foreground shrink-0" />
-                                            <span className="text-xs truncate max-w-[140px]">{attachment.file.name}</span>
-                                          </div>
-                                        )}
-                                        <Button
-                                          type="button"
-                                          variant="destructive"
-                                          size="icon"
-                                          className="absolute -top-2 -right-2 h-5 w-5"
-                                          onClick={() => removeEditingNewFile(index)}
-                                        >
-                                          <X className="h-3 w-3" />
-                                        </Button>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
                                 <div className="relative">
                                   <Textarea
                                     ref={editCommentTextareaRef}
                                     value={editingCommentText}
                                     onChange={(e) => handleMentionChange(e.target.value, 'edit', editCommentTextareaRef, editingCommentText, setEditingCommentText, setEditMentionQuery, setEditMentionIndex, setEditMentionOpen)}
                                     onKeyDown={(e) => handleMentionKeyDown(e, 'edit', editMentionOpen, editMentionCandidates, editMentionIndex, setEditMentionIndex, setEditMentionOpen, (m) => insertMention(m, 'edit', editCommentTextareaRef, editingCommentText, setEditingCommentText, setEditMentionOpen, setEditMentionQuery), saveCommentEdit)}
-                                    onPaste={handleEditingPaste}
-                                    rows={3}
-                                    className="bg-background text-foreground text-sm resize-y"
+                                    rows={2}
+                                    className="bg-background text-foreground text-sm"
                                     autoFocus
                                   />
                                   {editMentionOpen && editMentionCandidates.length > 0 && (
@@ -1333,63 +1133,23 @@ export default function TaskDetailPage() {
                                     </div>
                                   )}
                                 </div>
-                                <div className="flex items-center justify-between gap-2">
-                                  <div className="flex items-center gap-2">
-                                    <input
-                                      ref={editCommentFileInputRef}
-                                      type="file"
-                                      multiple
-                                      accept="image/*,video/*,application/pdf,.md,.markdown,text/markdown"
-                                      className="hidden"
-                                      onChange={(e) => {
-                                        const files = Array.from(e.target.files ?? []);
-                                        if (files.length) applyEditingFiles(files);
-                                        if (editCommentFileInputRef.current) editCommentFileInputRef.current.value = '';
-                                      }}
-                                    />
-                                    <Button
-                                      type="button"
-                                      size="sm"
-                                      variant="outline"
-                                      className="h-7 px-2 text-xs"
-                                      onClick={() => editCommentFileInputRef.current?.click()}
-                                      disabled={editImageUploading}
-                                    >
-                                      {editImageUploading ? (
-                                        <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                                      ) : (
-                                        <FileIcon className="h-3 w-3 mr-1" />
-                                      )}
-                                      Attach
-                                    </Button>
-                                  </div>
-                                  <div className="flex gap-1.5">
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      className="h-7 px-2 text-xs text-primary-foreground hover:text-primary-foreground hover:bg-primary/80"
-                                      onClick={clearEditingState}
-                                    >
-                                      Cancel
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      className="h-7 px-2 text-xs"
-                                      onClick={saveCommentEdit}
-                                      disabled={
-                                        commentEditLoading ||
-                                        editImageUploading ||
-                                        (!editingCommentText.trim() &&
-                                          editingAttachments.length === 0 &&
-                                          editingNewFiles.length === 0)
-                                      }
-                                    >
-                                      {commentEditLoading ? (
-                                        <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                                      ) : null}
-                                      Save
-                                    </Button>
-                                  </div>
+                                <div className="flex gap-1.5 justify-end">
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-7 px-2 text-xs text-primary-foreground hover:text-primary-foreground hover:bg-primary/80"
+                                    onClick={() => { setEditingCommentId(null); setEditingCommentText(''); }}
+                                  >
+                                    Cancel
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    className="h-7 px-2 text-xs"
+                                    onClick={saveCommentEdit}
+                                    disabled={commentEditLoading || !editingCommentText.trim()}
+                                  >
+                                    {commentEditLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
+                                  </Button>
                                 </div>
                               </div>
                             ) : (
@@ -1461,7 +1221,10 @@ export default function TaskDetailPage() {
                             <span>{formatRelativeTime(comment.created_at)}</span>
                             {isMine && !isEditingThis && (
                               <button
-                                onClick={() => startEditingComment(comment, commentAttachments, commentIds)}
+                                onClick={() => {
+                                  setEditingCommentId(comment.id);
+                                  setEditingCommentText(comment.message.trim() === ' ' ? '' : comment.message);
+                                }}
                                 className="text-muted-foreground/60 hover:text-foreground transition-colors"
                                 title="Edit message"
                               >
