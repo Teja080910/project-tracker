@@ -872,6 +872,31 @@ export default function TaskDetailPage() {
     );
   }
 
+  const commentGroups: {
+    comment: Comment;
+    attachments: { path: string; type: string | null; name: string | null }[];
+  }[] = [];
+
+  for (const comment of comments) {
+    const previousGroup = commentGroups[commentGroups.length - 1];
+    const previousComment = previousGroup?.comment;
+    const isAttachmentOnly = comment.message.trim() === 'Attachment' && !!comment.image_path;
+    const sentCloseTogether = previousComment
+      ? new Date(comment.created_at).getTime() - new Date(previousComment.created_at).getTime() <= 10_000
+      : false;
+    if (
+      previousGroup &&
+      previousComment &&
+      isAttachmentOnly &&
+      comment.user_id === previousComment.user_id &&
+      sentCloseTogether
+    ) {
+      previousGroup.attachments.push(...getCommentAttachments(comment));
+    } else {
+      commentGroups.push({ comment, attachments: getCommentAttachments(comment) });
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3 animate-fade-in-up">
@@ -955,7 +980,7 @@ export default function TaskDetailPage() {
             <CardHeader className="shrink-0">
               <CardTitle className="text-base flex items-center gap-2">
                 <MessageSquare className="h-4 w-4" />
-                Comments ({comments.length})
+                Comments ({commentGroups.length})
               </CardTitle>
             </CardHeader>
             <CardContent className="p-0 flex-1 flex flex-col overflow-hidden">
@@ -966,7 +991,7 @@ export default function TaskDetailPage() {
                 </div>
               ) : (
                 <div ref={commentsListRef} className="flex-1 overflow-y-auto px-4 pt-3 space-y-3 min-h-0">
-                  {comments.map((comment) => {
+                  {commentGroups.map(({ comment, attachments: commentAttachments }) => {
                     const isMine = comment.user_id === user?.id;
                     const isEditingThis = editingCommentId === comment.id;
                     const groupedReactions = reactions
@@ -976,7 +1001,6 @@ export default function TaskDetailPage() {
                         acc[r.emoji] = { count: prev.count + 1, mine: prev.mine || r.user_id === user?.id };
                         return acc;
                       }, {});
-                    const commentAttachments = getCommentAttachments(comment);
                     const hasMultipleAttachments = commentAttachments.length > 1;
                     return (
                       <div key={comment.id} className={`flex gap-2.5 ${isMine ? 'flex-row-reverse' : ''}`}>
