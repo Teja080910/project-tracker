@@ -413,30 +413,21 @@ function VersionDetailContent() {
           uploaded.push({ path: storageName, type: fileType, name: file.name });
         }
 
-        if (uploaded.length === 0) {
-          const { error: commentErr } = await supabase.from('comments').insert({
-            task_id: data.id,
-            user_id: user.id,
-            message: commentText,
-            image_path: null,
-            file_type: null,
-            file_name: null,
-          });
-          if (commentErr) throw commentErr;
-        } else {
-          for (let i = 0; i < uploaded.length; i += 1) {
-            const attachment = uploaded[i];
-            const { error: commentErr } = await supabase.from('comments').insert({
-              task_id: data.id,
-              user_id: user.id,
-              message: i === 0 ? commentText || 'Attachment' : 'Attachment',
-              image_path: attachment.path,
-              file_type: attachment.type,
-              file_name: attachment.name,
-            });
-            if (commentErr) throw commentErr;
-          }
-        }
+        const singleAttachment = uploaded.length === 1 ? uploaded[0] : null;
+        const { error: commentErr } = await supabase.from('comments').insert({
+          task_id: data.id,
+          user_id: user.id,
+          message: uploaded.length === 0 ? commentText : commentText || 'Attachment',
+          image_path:
+            uploaded.length === 0
+              ? null
+              : uploaded.length === 1
+                ? uploaded[0].path
+                : JSON.stringify(uploaded),
+          file_type: singleAttachment?.type ?? null,
+          file_name: singleAttachment?.name ?? null,
+        });
+        if (commentErr) throw commentErr;
 
         const projectSuffix = ` · ${project.name}`;
         const mentioned = members.filter(
