@@ -56,7 +56,7 @@ export function Topbar() {
       .limit(10);
     if (data) {
       setNotifications(data as unknown as Notification[]);
-      setUnreadCount(data.filter((n) => !n.read).length);
+      setUnreadCount(data.filter((n: any) => !n.read).length);
     }
   }, [profile]);
 
@@ -73,7 +73,7 @@ export function Topbar() {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${profile.id}` },
         async (payload) => {
-          const n = payload.new as Notification;
+          const n = payload.new as unknown as Notification;
           const { data: actor } = await supabase.from('profiles').select('*').eq('id', n.actor_id ?? '').maybeSingle();
           const { data: project } = await supabase.from('projects').select('*').eq('id', n.project_id ?? '').maybeSingle();
           setNotifications((prev) => {
@@ -182,7 +182,7 @@ export function Topbar() {
             {searchResults.projects.length > 0 && (
               <div className="p-1.5">
                 <p className="px-2 py-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Projects</p>
-                {searchResults.projects.map((p) => (
+                {searchResults.projects.map((p: any) => (
                   <Link
                     key={p.id}
                     href={`/app/projects/${p.slug}`}
@@ -202,7 +202,7 @@ export function Topbar() {
             {searchResults.tasks.length > 0 && (
               <div className="p-1.5 border-t border-border">
                 <p className="px-2 py-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Tasks</p>
-                {searchResults.tasks.map((t) => (
+                {searchResults.tasks.map((t: any) => (
                   <Link
                     key={t.id}
                     href={`/app/tasks/${t.number}`}
@@ -218,7 +218,7 @@ export function Topbar() {
             {searchResults.users.length > 0 && (
               <div className="p-1.5 border-t border-border">
                 <p className="px-2 py-1 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Users</p>
-                {searchResults.users.map((u) => (
+                {searchResults.users.map((u: any) => (
                   <div key={u.id} className="flex items-center gap-2 px-2 py-1.5 text-sm rounded-lg">
                     <div className="flex h-6 w-6 items-center justify-center rounded-full bg-secondary text-[10px] font-medium">
                       {(u.full_name ?? u.email).charAt(0).toUpperCase()}
@@ -264,7 +264,7 @@ export function Topbar() {
                 You&apos;re all caught up!
               </div>
             ) : (
-              notifications.map((n) => (
+              notifications.map((n: any) => (
                 <Link
                   key={n.id}
                   href={n.link ?? '#'}
@@ -376,7 +376,7 @@ function MobileNav({ onNavigate }: { onNavigate: () => void }) {
   ];
   return (
     <nav className="flex flex-col p-2 gap-0.5">
-      {items.map((item) => (
+      {items.map((item: any) => (
         <Link
           key={item.href}
           href={item.href}

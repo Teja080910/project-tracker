@@ -53,7 +53,7 @@ export default function DashboardPage() {
         .from('project_members')
         .select('project_id')
         .eq('user_id', user.id);
-      memberProjectIds = memberships?.map((m) => m.project_id) ?? [];
+      memberProjectIds = memberships?.map((m: any) => m.project_id) ?? [];
     }
 
     const [projectsRes, activeProjectsRes, myProjectsRes] = await Promise.all([
@@ -76,10 +76,10 @@ export default function DashboardPage() {
     const recentProjectsData =
       (profile?.role === 'super_admin'
         ? (myProjectsRes.data as unknown as Project[])
-        : (myProjectsRes.data?.map((m) => m.project) as unknown as Project[])) ?? [];
+        : (myProjectsRes.data?.map((m: any) => m.project) as unknown as Project[])) ?? [];
     setRecentProjects(recentProjectsData);
 
-    const projectIds = recentProjectsData.map((p) => p.id);
+    const projectIds = recentProjectsData.map((p: any) => p.id);
 
     let openTasks = 0,
       inProgressTasks = 0,
@@ -230,7 +230,7 @@ export default function DashboardPage() {
                 description="Tasks assigned to you will appear here"
               />
             ) : (
-              myAssignedTasks.map((task) => (
+              myAssignedTasks.map((task: any) => (
                 <Link
                   key={task.id}
                   href={`/app/tasks/${task.number}`}
@@ -274,7 +274,7 @@ export default function DashboardPage() {
                 description="Recently updated tasks will appear here"
               />
             ) : (
-              recentTasks.map((task) => (
+              recentTasks.map((task: any) => (
                 <Link
                   key={task.id}
                   href={`/app/tasks/${task.number}`}
@@ -322,7 +322,7 @@ export default function DashboardPage() {
             />
           ) : (
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {recentProjects.map((project) => (
+              {recentProjects.map((project: any) => (
                 <Link
                   key={project.id}
                   href={`/app/projects/${project.slug}`}

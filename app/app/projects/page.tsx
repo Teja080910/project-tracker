@@ -66,7 +66,7 @@ export default function ProjectsPage() {
         .from('project_members')
         .select('project_id')
         .eq('user_id', user.id);
-      const projectIds = memberships?.map((m) => m.project_id) ?? [];
+      const projectIds = memberships?.map((m: any) => m.project_id) ?? [];
       if (projectIds.length === 0) {
         setProjects([]);
         setLoading(false);

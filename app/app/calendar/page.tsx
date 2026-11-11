@@ -28,13 +28,13 @@ export default function CalendarPage() {
     let projectIds: string[] = [];
     if (profile?.role === 'super_admin') {
       const { data: allProjects } = await supabase.from('projects').select('id');
-      projectIds = (allProjects ?? []).map((p) => (p as { id: string }).id);
+      projectIds = (allProjects ?? []).map((p: any) => (p as { id: string }).id);
     } else {
       const { data: memberships } = await supabase
         .from('project_members')
         .select('project_id')
         .eq('user_id', user.id);
-      projectIds = memberships?.map((m) => m.project_id) ?? [];
+      projectIds = memberships?.map((m: any) => m.project_id) ?? [];
     }
 
     if (projectIds.length === 0) {
@@ -75,7 +75,7 @@ export default function CalendarPage() {
 
   // Counts for month view
   const monthKey = `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, '0')}`;
-  const monthTasks = tasks.filter((t) => t.due_date?.startsWith(monthKey));
+  const monthTasks = tasks.filter((t: any) => t.due_date?.startsWith(monthKey));
 
   const goToToday = () => {
     const today = new Date();
@@ -197,7 +197,7 @@ export default function CalendarPage() {
               />
             ) : (
               <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
-                {selectedTasks.map((task) => (
+                {selectedTasks.map((task: any) => (
                   <Link
                     key={task.id}
                     href={`/app/tasks/${task.number}`}

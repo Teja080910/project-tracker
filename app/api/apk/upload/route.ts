@@ -128,8 +128,8 @@ export async function POST(req: NextRequest) {
     .order('created_at', { ascending: false })
     .range(MAX_APKS, MAX_APKS + 99);
   if (stale && stale.length > 0) {
-    await supabaseAdmin.storage.from(APK_BUCKET).remove(stale.map((s) => s.storage_path));
-    await supabaseAdmin.from('project_apks').delete().in('id', stale.map((s) => s.id));
+    await supabaseAdmin.storage.from(APK_BUCKET).remove(stale.map((s: any) => s.storage_path));
+    await supabaseAdmin.from('project_apks').delete().in('id', stale.map((s: any) => s.id));
   }
 
   const { data: urlData } = supabaseAdmin.storage.from(APK_BUCKET).getPublicUrl(storagePath);

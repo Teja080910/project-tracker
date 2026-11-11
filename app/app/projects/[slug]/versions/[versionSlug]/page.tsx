@@ -160,9 +160,9 @@ function VersionDetailContent() {
       .from('project_members')
       .select('profile:profiles(*)')
       .eq('project_id', projectData.id);
-    const memberProfiles = (membersData?.map((m) => m.profile) as unknown as Profile[]) ?? [];
+    const memberProfiles = (membersData?.map((m: any) => m.profile) as unknown as Profile[]) ?? [];
     const { data: ownerData } = await supabase.from('profiles').select('*').eq('id', projectData.owner_id).maybeSingle();
-    if (ownerData && !memberProfiles.some((p) => p.id === ownerData.id)) {
+    if (ownerData && !memberProfiles.some((p: any) => p.id === ownerData.id)) {
       memberProfiles.push(ownerData as Profile);
     }
     setMembers(memberProfiles);
@@ -176,9 +176,9 @@ function VersionDetailContent() {
 
   const isSuperAdmin = profile?.role === 'super_admin';
   const showDeleted = isSuperAdmin && taskView === 'deleted';
-  const pool = showDeleted ? tasks.filter((t) => t.deleted_at) : tasks.filter((t) => !t.deleted_at);
+  const pool = showDeleted ? tasks.filter((t: any) => t.deleted_at) : tasks.filter((t: any) => !t.deleted_at);
 
-  const filtered = pool.filter((t) => {
+  const filtered = pool.filter((t: any) => {
     const matchesSearch = t.title.toLowerCase().includes(search.toLowerCase());
     const matchesStatus = filterStatus === 'all' || t.status === filterStatus;
     const matchesType = filterType === 'all' || t.type === filterType;
@@ -200,8 +200,8 @@ function VersionDetailContent() {
   const assignees = Array.from(
     new Map(
       tasks
-        .filter((t) => t.assignee)
-        .map((t) => [t.assignee!.id, t.assignee!])
+        .filter((t: any) => t.assignee)
+        .map((t: any) => [t.assignee!.id, t.assignee!])
     ).values()
   );
 
@@ -215,7 +215,7 @@ function VersionDetailContent() {
       return;
     }
     toast.success('Task restored');
-    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, deleted_at: null, deleted_by: null } : t)));
+    setTasks((prev) => prev.map((t: any) => (t.id === id ? { ...t, deleted_at: null, deleted_by: null } : t)));
   };
 
   const saveVersion = async () => {
@@ -248,7 +248,7 @@ function VersionDetailContent() {
   const isMarkdownAttachment = (t: string, name: string) =>
     t === 'text/markdown' || t === 'text/x-markdown' || t === 'application/markdown' || /\.(md|markdown)$/i.test(name);
 
-  const taskMentionCandidates = members.filter((m) => {
+  const taskMentionCandidates = members.filter((m: any) => {
     const q = (mentionQuery ?? '').toLowerCase();
     return (m.full_name ?? '').toLowerCase().includes(q) || m.email.toLowerCase().includes(q);
   });
@@ -658,7 +658,7 @@ function VersionDetailContent() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {TASK_TYPES.map((t) => (
+                    {TASK_TYPES.map((t: any) => (
                       <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
                     ))}
                   </SelectContent>
@@ -671,7 +671,7 @@ function VersionDetailContent() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {TASK_PRIORITIES.map((p) => (
+                    {TASK_PRIORITIES.map((p: any) => (
                       <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
                     ))}
                   </SelectContent>
@@ -690,8 +690,8 @@ function VersionDetailContent() {
                       className="w-full justify-between font-normal"
                     >
                       {taskAssigneeId !== 'none'
-                        ? members.find((m) => m.id === taskAssigneeId)?.full_name ??
-                          members.find((m) => m.id === taskAssigneeId)?.email
+                        ? members.find((m: any) => m.id === taskAssigneeId)?.full_name ??
+                          members.find((m: any) => m.id === taskAssigneeId)?.email
                         : 'Unassigned'}
                       <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                     </Button>
@@ -717,7 +717,7 @@ function VersionDetailContent() {
                             />
                             Unassigned
                           </CommandItem>
-                          {members.map((m) => (
+                          {members.map((m: any) => (
                             <CommandItem
                               key={m.id}
                               value={`${m.full_name ?? ''} ${m.email}`}
@@ -878,7 +878,7 @@ function VersionDetailContent() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Statuses</SelectItem>
-            {TASK_STATUSES.map((s) => (
+            {TASK_STATUSES.map((s: any) => (
               <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
             ))}
           </SelectContent>
@@ -896,7 +896,7 @@ function VersionDetailContent() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Types</SelectItem>
-            {TASK_TYPES.map((t) => (
+            {TASK_TYPES.map((t: any) => (
               <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
             ))}
           </SelectContent>
@@ -914,7 +914,7 @@ function VersionDetailContent() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Priorities</SelectItem>
-            {TASK_PRIORITIES.map((p) => (
+            {TASK_PRIORITIES.map((p: any) => (
               <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
             ))}
           </SelectContent>
@@ -933,7 +933,7 @@ function VersionDetailContent() {
           <SelectContent>
             <SelectItem value="all">All Assignees</SelectItem>
             <SelectItem value="unassigned">Unassigned</SelectItem>
-            {assignees.map((m) => (
+            {assignees.map((m: any) => (
               <SelectItem key={m.id} value={m.email}>{m.full_name ?? m.email}</SelectItem>
             ))}
           </SelectContent>
@@ -949,19 +949,19 @@ function VersionDetailContent() {
               title={
                 showDeleted
                   ? 'No deleted tasks'
-                  : tasks.filter((t) => !t.deleted_at).length === 0
+                  : tasks.filter((t: any) => !t.deleted_at).length === 0
                     ? 'No tasks yet'
                     : 'No tasks match filters'
               }
               description={
                 showDeleted
                   ? 'Deleted tasks from this version will appear here for Super Admin'
-                  : tasks.filter((t) => !t.deleted_at).length === 0
+                  : tasks.filter((t: any) => !t.deleted_at).length === 0
                     ? 'Create a task for this version'
                     : 'Try adjusting your filters'
               }
               action={
-                !showDeleted && tasks.filter((t) => !t.deleted_at).length === 0 ? (
+                !showDeleted && tasks.filter((t: any) => !t.deleted_at).length === 0 ? (
                   <Button size="sm" onClick={() => setTaskModalOpen(true)}>
                     New Task
                   </Button>
@@ -972,7 +972,7 @@ function VersionDetailContent() {
         </Card>
       ) : (
         <div className="space-y-1">
-          {pageItems.map((task) => {
+          {pageItems.map((task: any) => {
             const row = (
               <>
                 <TypeBadge type={task.type} />

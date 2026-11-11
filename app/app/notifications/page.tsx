@@ -94,11 +94,11 @@ function NotificationsContent() {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` },
         async (payload) => {
-          const n = payload.new as Notification;
+          const n = payload.new as unknown as unknown as Notification;
           const { data: actor } = await supabase.from('profiles').select('*').eq('id', n.actor_id ?? '').maybeSingle();
           const { data: project } = await supabase.from('projects').select('*').eq('id', n.project_id ?? '').maybeSingle();
           setNotifications((prev) => {
-            if (prev.some((x) => x.id === n.id)) return prev;
+            if (prev.some((x: any) => x.id === n.id)) return prev;
             return [{ ...n, actor: (actor as never) ?? null, project: (project as never) ?? null }, ...prev];
           });
         }
@@ -154,8 +154,8 @@ function NotificationsContent() {
     );
   }
 
-  const unreadCount = notifications.filter((n) => !n.read).length;
-  const filtered = notifications.filter((n) => {
+  const unreadCount = notifications.filter((n: any) => !n.read).length;
+  const filtered = notifications.filter((n: any) => {
     if (priorityFilter !== 'all' && n.priority !== priorityFilter) return false;
     if (typeFilter !== 'all' && n.type !== typeFilter) return false;
     if (search.trim()) {
@@ -223,7 +223,7 @@ function NotificationsContent() {
             <SelectValue placeholder="Priority" />
           </SelectTrigger>
           <SelectContent>
-            {priorityOptions.map((p) => (
+            {priorityOptions.map((p: any) => (
               <SelectItem key={p} value={p}>
                 {p === 'all' ? 'All priorities' : p.charAt(0).toUpperCase() + p.slice(1)}
               </SelectItem>
@@ -242,7 +242,7 @@ function NotificationsContent() {
             <SelectValue placeholder="Type" />
           </SelectTrigger>
           <SelectContent>
-            {typeOptions.map((t) => (
+            {typeOptions.map((t: any) => (
               <SelectItem key={t} value={t}>
                 {t === 'all' ? 'All types' : t.replace(/_/g, ' ')}
               </SelectItem>

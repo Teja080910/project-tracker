@@ -1,6 +1,6 @@
 import { readFileSync } from 'fs';
 import { WebSocket } from 'ws';
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from '../lib/supabase/client';
 
 (globalThis as any).WebSocket = WebSocket;
 

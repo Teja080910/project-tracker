@@ -145,7 +145,7 @@ function DocTreeNode({
       </div>
       {isOpen && hasChildren && (
         <div className="ml-3 space-y-0.5 border-l border-border/60 pl-2">
-          {node.children.map((child) => (
+          {node.children.map((child: any) => (
             <DocTreeNode
               key={child.id}
               node={child}
@@ -231,7 +231,7 @@ function ProjectDocsContent() {
   const tree = useMemo(() => buildTree(docs), [docs]);
   const flatDocs = useMemo(() => flattenTree(tree), [tree]);
   const selectedDoc = useMemo(
-    () => docs.find((d) => d.id === selectedId) ?? null,
+    () => docs.find((d: any) => d.id === selectedId) ?? null,
     [docs, selectedId]
   );
 
@@ -376,7 +376,7 @@ function ProjectDocsContent() {
                 </div>
               ) : (
                 <div className="space-y-0.5">
-                  {tree.map((node) => (
+                  {tree.map((node: any) => (
                     <DocTreeNode
                       key={node.id}
                       node={node}
@@ -521,7 +521,7 @@ function ProjectDocsContent() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">None (top level)</SelectItem>
-                  {flatDocs.map((d) => (
+                  {flatDocs.map((d: any) => (
                     <SelectItem key={d.id} value={d.id}>
                       {`${'— '.repeat(d.depth)}${d.title}`}
                     </SelectItem>
