@@ -1035,7 +1035,7 @@ export default function TaskDetailPage() {
                                         alt={attachment.name ?? 'comment attachment'}
                                         className={
                                           hasMultipleAttachments
-                                            ? 'h-40 w-full rounded-lg object-cover cursor-pointer'
+                                            ? 'max-h-64 w-full rounded-lg bg-black/10 object-contain cursor-pointer'
                                             : 'rounded-lg max-h-48 w-auto cursor-pointer'
                                         }
                                         onClick={() => setPreviewFile({ url: attachmentUrl, type: 'image' })}
@@ -1049,7 +1049,7 @@ export default function TaskDetailPage() {
                                         src={attachmentUrl}
                                         className={
                                           hasMultipleAttachments
-                                            ? 'h-40 w-full rounded-lg object-cover cursor-pointer'
+                                            ? 'max-h-64 w-full rounded-lg bg-black/10 cursor-pointer'
                                             : 'rounded-lg max-h-64 w-auto cursor-pointer'
                                         }
                                         controls
@@ -1100,8 +1100,8 @@ export default function TaskDetailPage() {
                                     value={editingCommentText}
                                     onChange={(e) => handleMentionChange(e.target.value, 'edit', editCommentTextareaRef, editingCommentText, setEditingCommentText, setEditMentionQuery, setEditMentionIndex, setEditMentionOpen)}
                                     onKeyDown={(e) => handleMentionKeyDown(e, 'edit', editMentionOpen, editMentionCandidates, editMentionIndex, setEditMentionIndex, setEditMentionOpen, (m) => insertMention(m, 'edit', editCommentTextareaRef, editingCommentText, setEditingCommentText, setEditMentionOpen, setEditMentionQuery), saveCommentEdit)}
-                                    rows={2}
-                                    className="bg-background text-foreground text-sm"
+                                    rows={3}
+                                    className="bg-background text-foreground text-sm resize-y"
                                     autoFocus
                                   />
                                   {editMentionOpen && editMentionCandidates.length > 0 && (
