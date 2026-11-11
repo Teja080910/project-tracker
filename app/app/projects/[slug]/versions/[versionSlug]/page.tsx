@@ -401,7 +401,7 @@ function VersionDetailContent() {
         const { error: commentErr } = await supabase.from('comments').insert({
           task_id: data.id,
           user_id: user.id,
-          message: commentText || ' ',
+          message: commentText || 'Attachment',
           image_path: imagePath,
           file_type: fileType,
           file_name: fileName,

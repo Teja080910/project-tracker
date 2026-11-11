@@ -528,7 +528,7 @@ export default function TaskDetailPage() {
     const { error } = await supabase.from('comments').insert({
       task_id: taskId,
       user_id: user.id,
-      message: newComment.trim() || ' ',
+      message: newComment.trim() || 'Attachment',
       image_path: imagePath,
       file_type: fileType,
       file_name: fileName,
