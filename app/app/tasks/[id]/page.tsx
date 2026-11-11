@@ -1101,7 +1101,7 @@ export default function TaskDetailPage() {
                                     onChange={(e) => handleMentionChange(e.target.value, 'edit', editCommentTextareaRef, editingCommentText, setEditingCommentText, setEditMentionQuery, setEditMentionIndex, setEditMentionOpen)}
                                     onKeyDown={(e) => handleMentionKeyDown(e, 'edit', editMentionOpen, editMentionCandidates, editMentionIndex, setEditMentionIndex, setEditMentionOpen, (m) => insertMention(m, 'edit', editCommentTextareaRef, editingCommentText, setEditingCommentText, setEditMentionOpen, setEditMentionQuery), saveCommentEdit)}
                                     rows={3}
-                                    className="bg-background text-foreground text-sm resize-y"
+                                    className="bg-background text-foreground text-sm resize-x max-w-full"
                                     autoFocus
                                   />
                                   {editMentionOpen && editMentionCandidates.length > 0 && (
