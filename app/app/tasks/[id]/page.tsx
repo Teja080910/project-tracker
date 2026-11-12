@@ -169,36 +169,23 @@ export default function TaskDetailPage() {
       return;
     }
 
-    if (profile?.role !== 'super_admin') {
-      const { data: membership } = await supabase
-        .from('project_members')
-        .select('id')
-        .eq('project_id', taskData.project_id)
-        .eq('user_id', user.id)
-        .maybeSingle();
-      if (!membership) {
-        setAccessDenied(true);
-        setLoading(false);
-        return;
-      }
-    }
-
-    setTaskId(taskData.id);
+    const resolvedTaskId = taskData.id;
+    setTaskId(resolvedTaskId);
 
     const task = taskData as unknown as Task;
     setTask(task);
     setEditTitle(task.title);
 
-    const [commentsRes, activityRes, membersRes, versionsRes, ownerRes] = await Promise.all([
+    const [commentsRes, activityRes, membersRes, versionsRes, ownerRes, myMembershipRes] = await Promise.all([
       supabase
         .from('comments')
         .select('*, profile:profiles(*)')
-        .eq('task_id', taskId)
+        .eq('task_id', resolvedTaskId)
         .order('created_at', { ascending: true }),
       supabase
         .from('activity_logs')
         .select('*, profile:profiles(*)')
-        .eq('task_id', taskId)
+        .eq('task_id', resolvedTaskId)
         .order('created_at', { ascending: false }),
       supabase
         .from('project_members')
@@ -206,7 +193,21 @@ export default function TaskDetailPage() {
         .eq('project_id', task.project_id),
       supabase.from('versions').select('*').eq('project_id', task.project_id).order('created_at', { ascending: false }),
       supabase.from('profiles').select('*').eq('id', task.project?.owner_id ?? '').maybeSingle(),
+      supabase
+        .from('project_members')
+        .select('role')
+        .eq('project_id', task.project_id)
+        .eq('user_id', user.id)
+        .maybeSingle(),
     ]);
+
+    const myMembership = (myMembershipRes.data as { role: string } | null) ?? null;
+    if (profile?.role !== 'super_admin' && !myMembership) {
+      setAccessDenied(true);
+      setLoading(false);
+      return;
+    }
+    setMyRole(myMembership?.role ?? null);
 
     const commentRows = (commentsRes.data as unknown as Comment[]) ?? [];
     setComments(commentRows);
@@ -233,17 +234,8 @@ export default function TaskDetailPage() {
     setMembers(memberProfiles);
     setVersions((versionsRes.data as Version[]) ?? []);
 
-    // Check my role
-    const { data: myMembership } = await supabase
-      .from('project_members')
-      .select('role')
-      .eq('project_id', task.project_id)
-      .eq('user_id', user.id)
-      .maybeSingle();
-    setMyRole((myMembership as { role: string } | null)?.role ?? null);
-
     setLoading(false);
-  }, [user, taskId, profile]);
+  }, [user?.id, taskParam, profile?.role]);
 
   useEffect(() => {
     fetchTask();

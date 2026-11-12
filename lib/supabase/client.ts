@@ -59,6 +59,9 @@ async function apiFetch(path: string, init: RequestInit = {}): Promise<Response>
   return fetch(`${API_URL}${path}`, { ...init, headers });
 }
 
+const readCache = new Map<string, { at: number; text: string }>();
+const READ_CACHE_MS = 1500;
+
 type Filter = { column: string; value: unknown };
 type InFilter = { column: string; values: unknown[] };
 
@@ -88,11 +91,22 @@ function parseRelations(spec?: string): RelationSpec[] {
   return relations;
 }
 
+const relationCache = new Map<string, { at: number; promise: Promise<Map<string, Row>> }>();
+
 async function loadRelation(table: string): Promise<Map<string, Row>> {
-  const response = await apiFetch(`/api/pt/data/${table}?limit=1000`);
-  if (!response.ok) return new Map();
-  const rows = (await response.json().catch(() => [])) as Row[];
-  return new Map(rows.map((row) => [String(row.id), row]));
+  const now = Date.now();
+  const cached = relationCache.get(table);
+  if (cached && now - cached.at < 5000) return cached.promise;
+
+  const promise = (async () => {
+    const response = await apiFetch(`/api/pt/data/${table}?limit=1000`);
+    if (!response.ok) return new Map<string, Row>();
+    const rows = (await response.json().catch(() => [])) as Row[];
+    return new Map(rows.map((row) => [String(row.id), row]));
+  })();
+  relationCache.set(table, { at: now, promise });
+  void promise.catch(() => relationCache.delete(table));
+  return promise;
 }
 
 async function hydrateRelations(table: string, data: unknown, spec?: string): Promise<unknown> {
@@ -254,9 +268,22 @@ class QueryBuilder<T = any> implements PromiseLike<QueryResult<T>> {
       const withQuery = query ? `?${query}` : '';
 
       if (this.action === 'select') {
+        const cacheKey = `${this.table}${withQuery}`;
+        const now = Date.now();
+        const cached = readCache.get(cacheKey);
+        if (cached && now - cached.at < READ_CACHE_MS) {
+          const body = JSON.parse(cached.text) as unknown;
+          if (this.countMode && this.headMode) {
+            return { data: null, error: null, count: Number(body) };
+          }
+          const hydrated = await hydrateRelations(this.table, body, this.selectSpec);
+          return { data: hydrated as T, error: null };
+        }
         const response = await apiFetch(`/api/pt/data/${this.table}${withQuery}`);
-        const body = await response.json().catch(() => null);
+        const text = await response.text().catch(() => '');
+        const body = text ? JSON.parse(text) : null;
         if (!response.ok) return { data: null, error: toError(response, body) };
+        readCache.set(cacheKey, { at: now, text });
         if (this.countMode && this.headMode) {
           return { data: null, error: null, count: Number(body) };
         }
@@ -264,6 +291,7 @@ class QueryBuilder<T = any> implements PromiseLike<QueryResult<T>> {
         return { data: hydrated as T, error: null };
       }
 
+      readCache.clear();
       if (this.action === 'insert') {
         const response = await apiFetch(`/api/pt/data/${this.table}`, {
           method: 'POST',
@@ -274,6 +302,7 @@ class QueryBuilder<T = any> implements PromiseLike<QueryResult<T>> {
         return { data: body as T, error: null };
       }
 
+      readCache.clear();
       if (this.action === 'upsert') {
         const response = await apiFetch(`/api/pt/data/${this.table}/upsert`, {
           method: 'POST',
@@ -284,6 +313,7 @@ class QueryBuilder<T = any> implements PromiseLike<QueryResult<T>> {
         return { data: body as T, error: null };
       }
 
+      readCache.clear();
       if (this.action === 'update') {
         const response = await apiFetch(`/api/pt/data/${this.table}${withQuery}`, {
           method: 'PATCH',
@@ -294,6 +324,7 @@ class QueryBuilder<T = any> implements PromiseLike<QueryResult<T>> {
         return { data: body as T, error: null };
       }
 
+      readCache.clear();
       const response = await apiFetch(`/api/pt/data/${this.table}${withQuery}`, { method: 'DELETE' });
       const body = await response.json().catch(() => null);
       if (!response.ok) return { data: null, error: toError(response, body) };
