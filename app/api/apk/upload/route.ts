@@ -1,68 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createHash } from 'crypto';
-import { supabaseAdmin } from '@/lib/supabase/server';
 
-const APK_BUCKET = 'apks';
-const MAX_APKS = 5;
-const MAX_SIZE = 200 * 1024 * 1024; // 200 MB
+const API_URL = process.env.API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://127.0.0.1:4105';
+const FILES_ROOT = (process.env.NEXT_PUBLIC_FILES_ROOT ?? process.env.NEXT_PUBLIC_FILES_URL ?? '').replace(/\/[^/]+$/, '');
 
 export const runtime = 'nodejs';
 
-async function authenticate(req: NextRequest): Promise<string | null> {
-  const auth = req.headers.get('authorization') ?? '';
-  const token = auth.replace(/^Bearer\s+/i, '').trim();
-  if (!token) return null;
+type ApiError = { error?: { message?: string } };
+type Profile = { id: string; role: string; disabled: boolean };
+type Project = {
+  id: string;
+  slug: string;
+  ownerId: string;
+  members?: Array<{ userId: string; role: string; profile?: Profile }>;
+};
 
-  if (token.startsWith('tf_')) {
-    const hash = createHash('sha256').update(token).digest('hex');
-    const { data: pat } = await supabaseAdmin
-      .from('personal_access_tokens')
-      .select('id, user_id')
-      .eq('token_hash', hash)
-      .maybeSingle();
-    if (!pat) return null;
-    await supabaseAdmin
-      .from('personal_access_tokens')
-      .update({ last_used_at: new Date().toISOString() })
-      .eq('id', pat.id);
-    return pat.user_id as string;
-  }
-
-  const { data } = await supabaseAdmin.auth.getUser(token);
-  return data.user?.id ?? null;
-}
-
-async function canUpload(userId: string, projectId: string): Promise<boolean> {
-  const { data: profile } = await supabaseAdmin
-    .from('profiles')
-    .select('role, disabled')
-    .eq('id', userId)
-    .maybeSingle();
-  if (!profile || profile.disabled) return false;
-  if ((profile.role as string) === 'super_admin') return true;
-
-  const { data: project } = await supabaseAdmin
-    .from('projects')
-    .select('owner_id')
-    .eq('id', projectId)
-    .maybeSingle();
-  if (!project) return false;
-  if (project.owner_id === userId) return true;
-
-  const { data: member } = await supabaseAdmin
-    .from('project_members')
-    .select('role')
-    .eq('project_id', projectId)
-    .eq('user_id', userId)
-    .maybeSingle();
-  if (!member) return false;
-  return ['developer', 'project_admin'].includes(member.role as string);
+async function api<T>(path: string, token: string, init: RequestInit = {}): Promise<{ ok: boolean; status: number; body: T & ApiError }> {
+  const headers = new Headers(init.headers);
+  headers.set('authorization', `Bearer ${token}`);
+  if (init.body && !headers.has('content-type')) headers.set('content-type', 'application/json');
+  const response = await fetch(`${API_URL}${path}`, { ...init, headers, cache: 'no-store' });
+  const body = (await response.json().catch(() => ({}))) as T & ApiError;
+  return { ok: response.ok, status: response.status, body };
 }
 
 export async function POST(req: NextRequest) {
-  const userId = await authenticate(req);
-  if (!userId) {
-    return NextResponse.json({ error: 'Unauthorized. Provide a valid personal access token.' }, { status: 401 });
+  const auth = req.headers.get('authorization') ?? '';
+  const token = auth.replace(/^Bearer\s+/i, '').trim();
+  if (!token) {
+    return NextResponse.json({ error: 'Unauthorized. Sign in first.' }, { status: 401 });
+  }
+
+  const me = await api<Profile>('/api/pt/me', token);
+  if (!me.ok || !me.body?.id) {
+    return NextResponse.json({ error: 'Unauthorized. Sign in first.' }, { status: 401 });
+  }
+  if (me.body.disabled) {
+    return NextResponse.json({ error: 'Account disabled' }, { status: 403 });
   }
 
   let form: FormData;
@@ -80,71 +53,70 @@ export async function POST(req: NextRequest) {
   if (!file.name.toLowerCase().endsWith('.apk')) {
     return NextResponse.json({ error: 'Only .apk files are allowed' }, { status: 400 });
   }
-  if (file.size > MAX_SIZE) {
+  if (file.size > 200 * 1024 * 1024) {
     return NextResponse.json({ error: 'File exceeds 200 MB limit' }, { status: 413 });
   }
   if (!projectId) {
     return NextResponse.json({ error: 'Missing "projectId" field' }, { status: 400 });
   }
 
-  if (!(await canUpload(userId, projectId))) {
+  const projectRes = await api<Project>(`/api/pt/projects/${encodeURIComponent(projectId)}`, token);
+  if (!projectRes.ok || !projectRes.body?.id) {
+    return NextResponse.json({ error: 'Project not found' }, { status: 404 });
+  }
+  const project = projectRes.body;
+  const member = project.members?.find((row) => row.userId === me.body.id);
+  const allowed =
+    ['super_admin', 'admin'].includes(me.body.role) ||
+    project.ownerId === me.body.id ||
+    (member ? ['developer', 'project_admin'].includes(member.role) : false);
+  if (!allowed) {
     return NextResponse.json({ error: 'You are not allowed to upload APKs to this project' }, { status: 403 });
   }
 
-  const storagePath = `${projectId}/${Date.now()}-${file.name}`;
+  const presign = await api<{ uploadUrl: string; objectKey: string; headers: Record<string, string> }>(
+    '/api/pt/uploads/presign',
+    token,
+    {
+      method: 'POST',
+      body: JSON.stringify({ bucket: 'apks', projectId, fileName: file.name, contentType: 'application/vnd.android.package-archive' }),
+    },
+  );
+  if (!presign.ok) {
+    return NextResponse.json({ error: presign.body?.error?.message ?? 'Could not prepare upload' }, { status: 500 });
+  }
+
   const buffer = Buffer.from(await file.arrayBuffer());
-  const { error: uploadError } = await supabaseAdmin.storage
-    .from(APK_BUCKET)
-    .upload(storagePath, buffer, {
-      contentType: 'application/vnd.android.package-archive',
-      upsert: false,
-    });
-  if (uploadError) {
-    return NextResponse.json({ error: uploadError.message }, { status: 500 });
+  const put = await fetch(presign.body.uploadUrl, {
+    method: 'PUT',
+    headers: { ...presign.body.headers, 'content-type': 'application/vnd.android.package-archive' },
+    body: buffer,
+  });
+  if (!put.ok) {
+    return NextResponse.json({ error: 'Could not upload APK' }, { status: 500 });
   }
 
-  const { data: inserted, error: insertError } = await supabaseAdmin
-    .from('project_apks')
-    .insert({
-      project_id: projectId,
-      uploaded_by: userId,
-      file_name: file.name,
-      size_bytes: file.size,
-      storage_path: storagePath,
-    })
-    .select('*')
-    .single();
-
-  if (insertError) {
-    await supabaseAdmin.storage.from(APK_BUCKET).remove([storagePath]);
-    return NextResponse.json({ error: insertError.message }, { status: 500 });
+  const registered = await api<{ id: string; number: number; fileName: string; storagePath: string }>(
+    `/api/pt/projects/${encodeURIComponent(projectId)}/apks`,
+    token,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        fileName: file.name,
+        sizeBytes: file.size,
+        storagePath: presign.body.objectKey,
+      }),
+    },
+  );
+  if (!registered.ok) {
+    return NextResponse.json({ error: registered.body?.error?.message ?? 'Could not save APK' }, { status: 500 });
   }
 
-  // Retention: keep only MAX_APKS newest per project
-  const { data: stale } = await supabaseAdmin
-    .from('project_apks')
-    .select('id, storage_path')
-    .eq('project_id', projectId)
-    .order('created_at', { ascending: false })
-    .range(MAX_APKS, MAX_APKS + 99);
-  if (stale && stale.length > 0) {
-    await supabaseAdmin.storage.from(APK_BUCKET).remove(stale.map((s: any) => s.storage_path));
-    await supabaseAdmin.from('project_apks').delete().in('id', stale.map((s: any) => s.id));
-  }
-
-  const { data: urlData } = supabaseAdmin.storage.from(APK_BUCKET).getPublicUrl(storagePath);
-  const { data: projectRow } = await supabaseAdmin
-    .from('projects')
-    .select('slug')
-    .eq('id', projectId)
-    .maybeSingle();
-
+  const publicUrl = `${FILES_ROOT}/pt-apks/${presign.body.objectKey.split('/').map(encodeURIComponent).join('/')}`;
   return NextResponse.json({
-    apk: inserted,
-    url: urlData.publicUrl,
-    shareUrl: projectRow
-      ? `${req.nextUrl.origin}/apk/${projectRow.slug}/${inserted.number}/${encodeURIComponent(inserted.file_name)}`
-      : urlData.publicUrl,
+    apk: registered.body,
+    url: publicUrl,
+    shareUrl: `${req.nextUrl.origin}/apk/${project.slug}/${registered.body.number}/${encodeURIComponent(file.name)}`,
     message: 'APK uploaded successfully',
   });
 }

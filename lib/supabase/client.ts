@@ -12,6 +12,14 @@ const AUTH_URL = process.env.NEXT_PUBLIC_AUTH_URL ?? 'http://127.0.0.1:4100';
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL ?? 'ws://127.0.0.1:4105/ws';
 const FILES_BASE =
   process.env.NEXT_PUBLIC_FILES_URL ?? 'http://127.0.0.1:19000/pt-task-screenshots';
+const FILES_ROOT =
+  process.env.NEXT_PUBLIC_FILES_ROOT ?? FILES_BASE.replace(/\/[^/]+$/, '');
+const BUCKET_PATHS: Record<string, string> = {
+  apks: 'pt-apks',
+  avatars: 'pt-avatars',
+  'task-screenshots': 'pt-task-screenshots',
+  docs: 'pt-task-screenshots',
+};
 
 export type QueryError = { message: string; code?: string; details?: string; hint?: string };
 /* eslint-disable @typescript-eslint/no-explicit-any -- Supabase-style builder erases row types */
@@ -54,6 +62,56 @@ async function apiFetch(path: string, init: RequestInit = {}): Promise<Response>
 type Filter = { column: string; value: unknown };
 type InFilter = { column: string; values: unknown[] };
 
+const RELATION_FK: Record<string, string> = {
+  project: 'project_id',
+  version: 'version_id',
+  assignee: 'assignee_id',
+  reporter: 'reporter_id',
+  actor: 'actor_id',
+  uploader: 'uploaded_by',
+  profile: 'user_id',
+};
+
+type RelationSpec = { alias: string; table: string; fk: string };
+
+function parseRelations(spec?: string): RelationSpec[] {
+  if (!spec) return [];
+  const relations: RelationSpec[] = [];
+  const pattern = /(\w+):(\w+)(?:!(\w+))?\(/g;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(spec))) {
+    const alias = match[1]!;
+    const table = match[2]!;
+    const fk = match[3] ?? RELATION_FK[alias];
+    if (fk) relations.push({ alias, table, fk });
+  }
+  return relations;
+}
+
+async function loadRelation(table: string): Promise<Map<string, Row>> {
+  const response = await apiFetch(`/api/pt/data/${table}?limit=1000`);
+  if (!response.ok) return new Map();
+  const rows = (await response.json().catch(() => [])) as Row[];
+  return new Map(rows.map((row) => [String(row.id), row]));
+}
+
+async function hydrateRelations(table: string, data: unknown, spec?: string): Promise<unknown> {
+  void table;
+  const relations = parseRelations(spec);
+  if (relations.length === 0 || !data) return data;
+  const rows = (Array.isArray(data) ? data : [data]) as Row[];
+  const maps = await Promise.all(relations.map((relation) => loadRelation(relation.table)));
+  for (const row of rows) {
+    for (let index = 0; index < relations.length; index += 1) {
+      const relation = relations[index]!;
+      const foreignKey = row[relation.fk];
+      row[relation.alias] =
+        foreignKey === null || foreignKey === undefined ? null : maps[index]!.get(String(foreignKey)) ?? null;
+    }
+  }
+  return data;
+}
+
 class QueryBuilder<T = any> implements PromiseLike<QueryResult<T>> {
   declare readonly __rowType?: T;
   private eqs: Filter[] = [];
@@ -64,6 +122,7 @@ class QueryBuilder<T = any> implements PromiseLike<QueryResult<T>> {
   private singleMode?: 'true' | 'maybe';
   private countMode = false;
   private headMode = false;
+  private selectSpec?: string;
   private action: 'select' | 'insert' | 'update' | 'delete' | 'upsert' = 'select';
   private payload?: unknown;
   private rangeFrom?: number;
@@ -72,7 +131,8 @@ class QueryBuilder<T = any> implements PromiseLike<QueryResult<T>> {
 
   constructor(private readonly table: string) {}
 
-  select(_columns?: string, options?: { count?: string; head?: boolean }) {
+  select(columns?: string, options?: { count?: string; head?: boolean }) {
+    if (columns) this.selectSpec = columns;
     if (options?.count === 'exact') this.countMode = true;
     if (options?.head) this.headMode = true;
     return this;
@@ -200,7 +260,8 @@ class QueryBuilder<T = any> implements PromiseLike<QueryResult<T>> {
         if (this.countMode && this.headMode) {
           return { data: null, error: null, count: Number(body) };
         }
-        return { data: body as T, error: null };
+        const hydrated = await hydrateRelations(this.table, body, this.selectSpec);
+        return { data: hydrated as T, error: null };
       }
 
       if (this.action === 'insert') {
@@ -556,25 +617,32 @@ export const supabase = {
     from(bucket: string) {
       return {
         getPublicUrl(objectPath: string) {
-          const base = FILES_BASE.replace(/\/$/, '');
-          return { data: { publicUrl: `${base}/${objectPath.replace(/^\/+/, '')}` } };
+          const bucketPath = BUCKET_PATHS[bucket] ?? bucket;
+          return {
+            data: {
+              publicUrl: `${FILES_ROOT}/${bucketPath}/${objectPath.replace(/^\/+/, '')}`,
+            },
+          };
         },
         async upload(objectPath: string, file: File | Blob | Buffer, options?: { contentType?: string; upsert?: boolean; cacheControl?: string }) {
           const token = await getToken();
           if (!token) return { data: null, error: { message: 'Not signed in' } };
-          const presignRes = await fetch(`${API_URL}/api/uploads/presign`, {
+          const contentType = options?.contentType ?? (file as File).type ?? 'application/octet-stream';
+          const presignRes = await fetch(`${API_URL}/api/pt/uploads/presign`, {
             method: 'POST',
             headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
             body: JSON.stringify({
+              bucket,
+              objectPath,
               fileName: objectPath.split('/').pop() ?? 'file',
-              contentType: options?.contentType ?? (file as File).type,
+              contentType,
             }),
           });
           if (!presignRes.ok) return { data: null, error: { message: 'Could not prepare upload' } };
           const presign = (await presignRes.json()) as { uploadUrl: string; objectKey: string; headers: Record<string, string> };
           const put = await fetch(presign.uploadUrl, {
             method: 'PUT',
-            headers: { ...presign.headers, 'content-type': options?.contentType ?? (file as File).type },
+            headers: { ...presign.headers, 'content-type': contentType },
             body: file,
           });
           if (!put.ok) return { data: null, error: { message: 'Upload failed' } };
@@ -583,16 +651,26 @@ export const supabase = {
         async remove(paths: string[]) {
           const token = await getToken();
           if (!token) return { data: null, error: { message: 'Not signed in' } };
-          for (const path of paths) {
-            await fetch(`${API_URL}/api/uploads/object?key=${encodeURIComponent(path)}`, {
-              method: 'DELETE',
-              headers: { authorization: `Bearer ${token}` },
+          for (const objectKey of paths) {
+            await fetch(`${API_URL}/api/pt/uploads/remove`, {
+              method: 'POST',
+              headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+              body: JSON.stringify({ bucket, objectKey }),
             }).catch(() => undefined);
           }
           return { data: {}, error: null };
         },
-        async list(_prefix?: string) {
-          return { data: [], error: null };
+        async list(prefix?: string) {
+          const token = await getToken();
+          if (!token) return { data: [], error: null };
+          const params = new URLSearchParams({ bucket });
+          if (prefix) params.set('prefix', prefix);
+          const response = await fetch(`${API_URL}/api/pt/uploads/list?${params.toString()}`, {
+            headers: { authorization: `Bearer ${token}` },
+          });
+          if (!response.ok) return { data: [], error: null };
+          const body = (await response.json()) as { files?: Array<{ name: string; size: number }> };
+          return { data: body.files ?? [], error: null };
         },
         async download(objectPath: string) {
           const token = await getToken();

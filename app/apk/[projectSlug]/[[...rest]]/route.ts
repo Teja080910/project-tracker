@@ -1,55 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase/server';
+
+const API_URL = process.env.API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://127.0.0.1:4105';
+const FILES_ROOT = (process.env.NEXT_PUBLIC_FILES_ROOT ?? process.env.NEXT_PUBLIC_FILES_URL ?? '').replace(/\/[^/]+$/, '');
 
 export const runtime = 'nodejs';
 
+type ApkLookup = {
+  apk?: { storagePath?: string; storage_path?: string; fileName?: string; file_name?: string };
+};
+
 export async function GET(
   _req: NextRequest,
-  { params }: { params: { projectSlug: string; rest?: string[] } }
+  { params }: { params: { projectSlug: string; rest?: string[] } },
 ) {
-  const segments = (params.rest || []).map((s: any) => decodeURIComponent(s));
+  const segments = (params.rest || []).map((segment) => decodeURIComponent(segment));
   if (segments.length === 0) {
     return NextResponse.json({ error: 'Invalid APK path' }, { status: 400 });
   }
 
-  let number: number | null = null;
-  let fileName: string | null = null;
+  const identifier = /^\d+$/.test(segments[0]!)
+    ? segments[0]!
+    : segments.join('/');
 
-  if (/^\d+$/.test(segments[0])) {
-    number = parseInt(segments[0], 10);
-    // Optional trailing filename segment is accepted but ignored for lookup
-    fileName = segments.length > 1 ? segments.slice(1).join('/') : null;
-  } else {
-    fileName = segments.join('/');
+  const response = await fetch(
+    `${API_URL}/api/public/pt/apk/${encodeURIComponent(params.projectSlug)}/${encodeURIComponent(identifier)}`,
+    { cache: 'no-store' },
+  );
+  if (!response.ok) {
+    return NextResponse.json({ error: 'APK not found' }, { status: response.status === 404 ? 404 : 502 });
   }
 
-  const { data: project } = await supabaseAdmin
-    .from('projects')
-    .select('id')
-    .eq('slug', params.projectSlug)
-    .maybeSingle();
-  if (!project) {
-    return NextResponse.json({ error: 'Project not found' }, { status: 404 });
-  }
-
-  let query = supabaseAdmin
-    .from('project_apks')
-    .select('number, file_name, storage_path')
-    .eq('project_id', project.id);
-
-  if (number !== null) {
-    query = query.eq('number', number);
-  } else if (fileName) {
-    query = query.eq('file_name', fileName).order('created_at', { ascending: false }).limit(1);
-  } else {
-    return NextResponse.json({ error: 'Invalid APK path' }, { status: 400 });
-  }
-
-  const { data: apk } = await query.maybeSingle();
-  if (!apk) {
+  const body = (await response.json().catch(() => null)) as ApkLookup | null;
+  const storagePath = body?.apk?.storagePath ?? body?.apk?.storage_path;
+  if (!storagePath) {
     return NextResponse.json({ error: 'APK not found' }, { status: 404 });
   }
 
-  const { data } = supabaseAdmin.storage.from('apks').getPublicUrl(apk.storage_path);
-  return NextResponse.redirect(data.publicUrl, 302);
+  const location = `${FILES_ROOT}/pt-apks/${storagePath.split('/').map(encodeURIComponent).join('/')}`;
+  return NextResponse.redirect(location, 302);
 }

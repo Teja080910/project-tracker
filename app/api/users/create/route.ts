@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase/server';
+
+const API_URL = process.env.API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://127.0.0.1:4105';
 
 export const runtime = 'nodejs';
 
@@ -10,49 +11,34 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { data: me } = await supabaseAdmin.auth.getUser(token);
-  if (!me.user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
-  const { data: profile } = await supabaseAdmin
-    .from('profiles')
-    .select('role, disabled')
-    .eq('id', me.user.id)
-    .maybeSingle();
-
-  if (!profile || profile.disabled) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
-
-  if (profile.role !== 'super_admin' && profile.role !== 'project_admin') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-  }
-
-  const body = await req.json();
-  const { email, password, full_name, role } = body;
-
+  const body = await req.json().catch(() => null);
+  const { email, password, full_name, role } = (body ?? {}) as Record<string, unknown>;
   if (!email || !password) {
     return NextResponse.json({ error: 'Email and password are required' }, { status: 400 });
   }
-
-  if (password.length < 6) {
-    return NextResponse.json({ error: 'Password must be at least 6 characters' }, { status: 400 });
+  if (String(password).length < 8) {
+    return NextResponse.json({ error: 'Password must be at least 8 characters' }, { status: 400 });
   }
 
-  const { data, error } = await supabaseAdmin.auth.admin.createUser({
-    email,
-    password,
-    user_metadata: { full_name },
+  const response = await fetch(`${API_URL}/api/pt/users`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+    body: JSON.stringify({
+      email,
+      password,
+      fullName: full_name || String(email).split('@')[0],
+      role: role || 'viewer',
+    }),
   });
+  const result = (await response.json().catch(() => null)) as
+    | { id?: string; email?: string; error?: { message?: string } }
+    | null;
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 400 });
+  if (!response.ok) {
+    return NextResponse.json(
+      { error: result?.error?.message ?? 'Could not create user' },
+      { status: response.status },
+    );
   }
-
-  if (data.user) {
-    await supabaseAdmin.from('profiles').update({ role: role || 'viewer', full_name, created_by: me.user.id }).eq('id', data.user.id);
-  }
-
-  return NextResponse.json({ user: data.user });
+  return NextResponse.json({ user: result });
 }
