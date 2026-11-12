@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const API_URL = process.env.API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://127.0.0.1:4105';
 const FILES_ROOT = (process.env.NEXT_PUBLIC_FILES_ROOT ?? process.env.NEXT_PUBLIC_FILES_URL ?? '').replace(/\/[^/]+$/, '');
+const APP_URL = (process.env.NEXT_PUBLIC_APP_URL ?? '').replace(/\/+$/, '');
 
 export const runtime = 'nodejs';
 
@@ -116,7 +117,7 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     apk: registered.body,
     url: publicUrl,
-    shareUrl: `${req.nextUrl.origin}/apk/${project.slug}/${registered.body.number}/${encodeURIComponent(file.name)}`,
+    shareUrl: `${APP_URL || req.nextUrl.origin}/apk/${project.slug}/${registered.body.number}/${encodeURIComponent(file.name)}`,
     message: 'APK uploaded successfully',
   });
 }
