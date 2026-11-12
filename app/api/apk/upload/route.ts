@@ -3,7 +3,7 @@ import { createHash } from 'crypto';
 import { supabaseAdmin } from '@/lib/supabase/server';
 
 const APK_BUCKET = 'apks';
-const MAX_APKS = 10;
+const MAX_APKS = 5;
 const MAX_SIZE = 200 * 1024 * 1024; // 200 MB
 
 export const runtime = 'nodejs';

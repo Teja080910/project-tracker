@@ -738,7 +738,7 @@ export default function ProjectDetailPage() {
           <h3 className="text-sm font-medium flex items-center gap-2">
             <Package className="h-4 w-4" />
             APK Builds
-            <Badge variant="secondary" className="text-xs">{apks.length}/10</Badge>
+            <Badge variant="secondary" className="text-xs">{apks.length}/5</Badge>
           </h3>
           {canUploadApk && (
             <>
@@ -763,7 +763,7 @@ export default function ProjectDetailPage() {
         {apks.length === 0 ? (
           <Card>
             <CardContent className="py-6">
-              <EmptyState icon={Package} title="No APK builds yet" description="Uploaded builds appear here (max 10 kept)" />
+              <EmptyState icon={Package} title="No APK builds yet" description="Uploaded builds appear here (max 5 kept)" />
             </CardContent>
           </Card>
         ) : (

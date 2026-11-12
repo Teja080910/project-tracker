@@ -68,6 +68,7 @@ class QueryBuilder<T = any> implements PromiseLike<QueryResult<T>> {
   private payload?: unknown;
   private rangeFrom?: number;
   private rangeTo?: number;
+  private offsetCount?: number;
 
   constructor(private readonly table: string) {}
 
@@ -126,6 +127,7 @@ class QueryBuilder<T = any> implements PromiseLike<QueryResult<T>> {
   range(from: number, to: number) {
     this.rangeFrom = from;
     this.rangeTo = to;
+    this.offsetCount = from;
     this.limitCount = to - from + 1;
     return this;
   }
@@ -179,6 +181,7 @@ class QueryBuilder<T = any> implements PromiseLike<QueryResult<T>> {
     }
     if (this.orderBy) params.set('order', `${this.orderBy.column}:${this.orderBy.ascending ? 'asc' : 'desc'}`);
     if (this.limitCount) params.set('limit', String(this.limitCount));
+    if (this.offsetCount) params.set('offset', String(this.offsetCount));
     if (this.singleMode) params.set('single', this.singleMode);
     if (this.countMode) params.set('count', 'true');
     if (this.headMode) params.set('head', 'true');
