@@ -123,7 +123,7 @@ export default function ProjectDetailPage() {
     setMembers((membersRes.data as unknown as ProjectMember[]) ?? []);
     setVersions((versionsRes.data as Version[]) ?? []);
 
-    const myMembership = (membersRes.data as unknown as ProjectMember[])?.find((m) => m.user_id === user.id);
+    const myMembership = (membersRes.data as unknown as ProjectMember[])?.find((m: any) => m.user_id === user.id);
     setMyRole(myMembership?.role ?? null);
 
     if (isSuperAdmin || myMembership?.role === 'project_admin' || projectData.owner_id === user.id) {
@@ -201,7 +201,7 @@ export default function ProjectDetailPage() {
         body: `Role: ${getRoleLabel(newMemberRole)}`,
         link: `/app/projects/${projectSlug}`,
       });
-      const newMember = allProfiles.find((p) => p.id === newMemberId);
+      const newMember = allProfiles.find((p: any) => p.id === newMemberId);
       if (newMember) {
         sendNotificationEmail(
           newMember.email,
@@ -293,10 +293,10 @@ export default function ProjectDetailPage() {
   };
 
   const availableProfiles = allProfiles.filter(
-    (p) => !members.some((m) => m.user_id === p.id)
+    (p) => !members.some((m: any) => m.user_id === p.id)
   );
 
-  const memberSearchResults = availableProfiles.filter((p) => {
+  const memberSearchResults = availableProfiles.filter((p: any) => {
     const q = memberSearch.toLowerCase();
     return (
       (p.full_name ?? '').toLowerCase().includes(q) ||
@@ -514,7 +514,7 @@ export default function ProjectDetailPage() {
           </Card>
         ) : (
           <div className="space-y-2">
-            {pageVersions.map((version) => {
+            {pageVersions.map((version: any) => {
               const vMeta = getVersionStatusMeta(version.status);
               return (
                 <Link
@@ -590,7 +590,7 @@ export default function ProjectDetailPage() {
                       ) : (
                         <>
                           <div className="max-h-64 overflow-y-auto divide-y divide-border/50">
-                            {memberPageItems.map((p) => (
+                            {memberPageItems.map((p: any) => (
                               <button
                                 key={p.id}
                                 type="button"
@@ -684,7 +684,7 @@ export default function ProjectDetailPage() {
           </Card>
         ) : (
           <div className="space-y-1">
-            {members.map((member) => (
+            {members.map((member: any) => (
               <div
                 key={member.id}
                 className="flex items-center gap-3 px-3 py-2 rounded-md border border-border"
@@ -738,7 +738,7 @@ export default function ProjectDetailPage() {
           <h3 className="text-sm font-medium flex items-center gap-2">
             <Package className="h-4 w-4" />
             APK Builds
-            <Badge variant="secondary" className="text-xs">{apks.length}/10</Badge>
+            <Badge variant="secondary" className="text-xs">{apks.length}/5</Badge>
           </h3>
           {canUploadApk && (
             <>
@@ -763,12 +763,12 @@ export default function ProjectDetailPage() {
         {apks.length === 0 ? (
           <Card>
             <CardContent className="py-6">
-              <EmptyState icon={Package} title="No APK builds yet" description="Uploaded builds appear here (max 10 kept)" />
+              <EmptyState icon={Package} title="No APK builds yet" description="Uploaded builds appear here (max 5 kept)" />
             </CardContent>
           </Card>
         ) : (
           <div className="space-y-1">
-            {apks.map((apk) => (
+            {apks.map((apk: any) => (
               <div key={apk.id} className="flex items-center gap-3 px-3 py-2 rounded-md border border-border">
                 <Package className="h-5 w-5 text-muted-foreground shrink-0" />
                 <div className="flex-1 min-w-0">

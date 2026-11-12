@@ -60,7 +60,7 @@ export default function UsersPage() {
         .from('project_members')
         .select('project_id')
         .eq('user_id', user?.id ?? '');
-      const projectIds = memberships?.map((m) => m.project_id) ?? [];
+      const projectIds = memberships?.map((m: any) => m.project_id) ?? [];
 
       const memberIds = new Set<string>();
       if (projectIds.length > 0) {
@@ -68,14 +68,14 @@ export default function UsersPage() {
           .from('project_members')
           .select('user_id')
           .in('project_id', projectIds);
-        memberRows?.forEach((m) => memberIds.add(m.user_id));
+        memberRows?.forEach((m: any) => memberIds.add(m.user_id));
       }
 
       const { data: createdUsers } = await supabase
         .from('profiles')
         .select('id')
         .eq('created_by', user?.id ?? '');
-      createdUsers?.forEach((u) => memberIds.add(u.id));
+      createdUsers?.forEach((u: any) => memberIds.add(u.id));
 
       if (memberIds.size === 0) {
         setUsers([]);
@@ -108,7 +108,7 @@ export default function UsersPage() {
 
   const availableRoles = isSuperAdmin
     ? ROLES
-    : ROLES.filter((r) => r.value !== 'super_admin' && r.value !== 'admin' && r.value !== 'project_admin');
+    : ROLES.filter((r: any) => r.value !== 'super_admin' && r.value !== 'admin' && r.value !== 'project_admin');
 
   if (!canManageUsers) {
     return (
@@ -213,7 +213,7 @@ export default function UsersPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {availableRoles.map((r) => (
+                    {availableRoles.map((r: any) => (
                       <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
                     ))}
                   </SelectContent>
@@ -269,7 +269,7 @@ export default function UsersPage() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {ROLES.map((r) => (
+                      {ROLES.map((r: any) => (
                         <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
                       ))}
                     </SelectContent>

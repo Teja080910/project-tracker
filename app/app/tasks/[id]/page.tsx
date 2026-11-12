@@ -210,7 +210,7 @@ export default function TaskDetailPage() {
 
     const commentRows = (commentsRes.data as unknown as Comment[]) ?? [];
     setComments(commentRows);
-    const commentIds = commentRows.map((c) => c.id);
+    const commentIds = commentRows.map((c: any) => c.id);
     if (commentIds.length > 0) {
       const { data: reactionRows } = await supabase
         .from('comment_reactions')
@@ -221,13 +221,13 @@ export default function TaskDetailPage() {
       setReactions([]);
     }
     setActivityLogs((activityRes.data as unknown as ActivityLog[]) ?? []);
-    const memberProfiles = (membersRes.data?.map((m) => m.profile) as unknown as Profile[]) ?? [];
+    const memberProfiles = (membersRes.data?.map((m: any) => m.profile) as unknown as Profile[]) ?? [];
     // Include the project owner (may not be a project_member row)
-    if (ownerRes.data && !memberProfiles.some((p) => p.id === ownerRes.data.id)) {
+    if (ownerRes.data && !memberProfiles.some((p: any) => p.id === ownerRes.data.id)) {
       memberProfiles.push(ownerRes.data as Profile);
     }
     // Include the reporter (ticket creator) so they can always be mentioned
-    if (task.reporter && !memberProfiles.some((p) => p.id === task.reporter?.id)) {
+    if (task.reporter && !memberProfiles.some((p: any) => p.id === task.reporter?.id)) {
       memberProfiles.push(task.reporter as Profile);
     }
     setMembers(memberProfiles);
@@ -258,7 +258,7 @@ export default function TaskDetailPage() {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'comments', filter: `task_id=eq.${taskId}` },
         async (payload) => {
-          const newComment = payload.new as Comment;
+          const newComment = payload.new as unknown as Comment;
           // Avoid duplicates: skip if this is the comment we just inserted
           const { data: profileData } = await supabase
             .from('profiles')
@@ -266,18 +266,18 @@ export default function TaskDetailPage() {
             .eq('id', newComment.user_id)
             .maybeSingle();
           setComments((prev) => {
-            if (prev.some((c) => c.id === newComment.id)) return prev;
+            if (prev.some((c: any) => c.id === newComment.id)) return prev;
             return [...prev, { ...newComment, profile: (profileData as Profile) ?? undefined }];
           });
         }
       )
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'comment_reactions' }, (payload) => {
-        const r = payload.new as CommentReaction;
-        setReactions((prev) => (prev.some((x) => x.id === r.id) ? prev : [...prev, r]));
+        const r = payload.new as unknown as CommentReaction;
+        setReactions((prev) => (prev.some((x: any) => x.id === r.id) ? prev : [...prev, r]));
       })
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'comment_reactions' }, (payload) => {
         const old = payload.old as { id?: string };
-        if (old?.id) setReactions((prev) => prev.filter((x) => x.id !== old.id));
+        if (old?.id) setReactions((prev) => prev.filter((x: any) => x.id !== old.id));
       })
       .subscribe();
 
@@ -371,7 +371,7 @@ export default function TaskDetailPage() {
   };
 
   // --- @mention support ---
-  const mentionCandidates = members.filter((m) => {
+  const mentionCandidates = members.filter((m: any) => {
     const q = (mentionQuery ?? '').toLowerCase();
     return (
       (m.full_name ?? '').toLowerCase().includes(q) ||
@@ -379,7 +379,7 @@ export default function TaskDetailPage() {
     );
   });
 
-  const editMentionCandidates = members.filter((m) => {
+  const editMentionCandidates = members.filter((m: any) => {
     const q = (editMentionQuery ?? '').toLowerCase();
     return (
       (m.full_name ?? '').toLowerCase().includes(q) ||
@@ -482,12 +482,12 @@ export default function TaskDetailPage() {
       (a, b) => (b.full_name ?? b.email).length - (a.full_name ?? a.email).length
     );
     const pattern = sorted
-      .map((m) => `@${(m.full_name ?? m.email).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`)
+      .map((m: any) => `@${(m.full_name ?? m.email).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`)
       .join('|');
     if (!pattern) return text;
     const parts = text.split(new RegExp(`(${pattern})`));
     return parts.map((part, i) => {
-      const m = sorted.find((x) => `@${x.full_name ?? x.email}` === part);
+      const m = sorted.find((x: any) => `@${x.full_name ?? x.email}` === part);
       if (m) {
         const name = m.full_name ?? m.email;
         const isMe = m.id === user?.id;
@@ -518,7 +518,7 @@ export default function TaskDetailPage() {
         toast.error(error.message);
         return;
       }
-      setReactions((prev) => prev.filter((r) => r.id !== existing.id));
+      setReactions((prev) => prev.filter((r: any) => r.id !== existing.id));
       return;
     }
     const { data, error } = await supabase
@@ -531,7 +531,7 @@ export default function TaskDetailPage() {
       return;
     }
     const created = data as CommentReaction;
-    setReactions((prev) => (prev.some((r) => r.id === created.id) ? prev : [...prev, created]));
+    setReactions((prev) => (prev.some((r: any) => r.id === created.id) ? prev : [...prev, created]));
   };
 
   const addComment = async () => {
@@ -604,7 +604,7 @@ export default function TaskDetailPage() {
       };
 
       // Notify mentioned users
-      const mentioned = members.filter((m) => {
+      const mentioned = members.filter((m: any) => {
         const name = m.full_name ?? m.email;
         return m.id !== user.id && commentText.includes(`@${name}`);
       });
@@ -632,7 +632,7 @@ export default function TaskDetailPage() {
       }
 
       // Notify assignee (if not already mentioned)
-      if (task.assignee_id && task.assignee_id !== user.id && !mentioned.some((m) => m.id === task.assignee_id)) {
+      if (task.assignee_id && task.assignee_id !== user.id && !mentioned.some((m: any) => m.id === task.assignee_id)) {
         const { error: notifErr } = await supabase.from('notifications').insert({
           ...notifBase,
           user_id: task.assignee_id,
@@ -641,7 +641,7 @@ export default function TaskDetailPage() {
           body: commentText.slice(0, 100) || attachmentLabel,
         });
         if (notifErr) throw notifErr;
-        const assignee = members.find((m) => m.id === task.assignee_id);
+        const assignee = members.find((m: any) => m.id === task.assignee_id);
         if (assignee) {
           sendNotificationEmail(
             assignee.email,
@@ -723,7 +723,7 @@ export default function TaskDetailPage() {
             priority: task.priority,
           });
           if (notifErr) throw notifErr;
-          const assignee = members.find((m) => m.id === task.assignee_id);
+          const assignee = members.find((m: any) => m.id === task.assignee_id);
           if (assignee) {
             sendNotificationEmail(
               assignee.email,
@@ -754,7 +754,7 @@ export default function TaskDetailPage() {
             priority: updates.priority ?? task.priority,
           });
           if (notifErr) throw notifErr;
-          const newAssignee = members.find((m) => m.id === newAssigneeId);
+          const newAssignee = members.find((m: any) => m.id === newAssigneeId);
           if (newAssignee) {
             sendNotificationEmail(
               newAssignee.email,
@@ -995,7 +995,7 @@ export default function TaskDetailPage() {
                     const isMine = comment.user_id === user?.id;
                     const isEditingThis = editingCommentId === comment.id;
                     const groupedReactions = reactions
-                      .filter((r) => r.comment_id === comment.id)
+                      .filter((r: any) => r.comment_id === comment.id)
                       .reduce<Record<string, { count: number; mine: boolean }>>((acc, r) => {
                         const prev = acc[r.emoji] ?? { count: 0, mine: false };
                         acc[r.emoji] = { count: prev.count + 1, mine: prev.mine || r.user_id === user?.id };
@@ -1199,7 +1199,7 @@ export default function TaskDetailPage() {
                                 </PopoverTrigger>
                                 <PopoverContent align={isMine ? 'end' : 'start'} className="w-auto p-1.5">
                                   <div className="flex items-center gap-0.5">
-                                    {REACTION_EMOJIS.map((emoji) => (
+                                    {REACTION_EMOJIS.map((emoji: any) => (
                                       <button
                                         key={emoji}
                                         type="button"
@@ -1385,7 +1385,7 @@ export default function TaskDetailPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {TASK_STATUSES.map((s) => (
+                    {TASK_STATUSES.map((s: any) => (
                       <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
                     ))}
                   </SelectContent>
@@ -1404,7 +1404,7 @@ export default function TaskDetailPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {TASK_PRIORITIES.map((p) => (
+                    {TASK_PRIORITIES.map((p: any) => (
                       <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
                     ))}
                   </SelectContent>
@@ -1423,7 +1423,7 @@ export default function TaskDetailPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {TASK_TYPES.map((t) => (
+                    {TASK_TYPES.map((t: any) => (
                       <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
                     ))}
                   </SelectContent>
@@ -1469,7 +1469,7 @@ export default function TaskDetailPage() {
                             />
                             Unassigned
                           </CommandItem>
-                          {members.map((m) => (
+                          {members.map((m: any) => (
                             <CommandItem
                               key={m.id}
                               value={`${m.full_name ?? ''} ${m.email}`}
@@ -1513,7 +1513,7 @@ export default function TaskDetailPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">No version</SelectItem>
-                    {versions.map((v) => (
+                    {versions.map((v: any) => (
                       <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
                     ))}
                   </SelectContent>
@@ -1581,7 +1581,7 @@ export default function TaskDetailPage() {
               ) : (
                 <>
                   <div className="space-y-3">
-                    {visibleActivity.map((log) => (
+                    {visibleActivity.map((log: any) => (
                       <div key={log.id} className="flex items-start gap-2 text-xs">
                         <UserAvatar profile={log.profile} className="h-5 w-5 shrink-0" />
                         <div className="flex-1 min-w-0">

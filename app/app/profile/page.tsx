@@ -49,7 +49,7 @@ export default function ProfilePage() {
       if (existing && existing.length > 0) {
         await supabase.storage
           .from('avatars')
-          .remove(existing.map((f) => `${user.id}/${f.name}`));
+          .remove(existing.map((f: any) => `${user.id}/${f.name}`));
       }
 
       const { error: uploadError } = await supabase.storage
@@ -82,7 +82,7 @@ export default function ProfilePage() {
       if (existing && existing.length > 0) {
         await supabase.storage
           .from('avatars')
-          .remove(existing.map((f) => `${user.id}/${f.name}`));
+          .remove(existing.map((f: any) => `${user.id}/${f.name}`));
       }
       const { error } = await supabase
         .from('profiles')
@@ -144,9 +144,9 @@ export default function ProfilePage() {
     if (!user) return;
     const bytes = new Uint8Array(32);
     crypto.getRandomValues(bytes);
-    const raw = 'tf_' + Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('');
+    const raw = 'tf_' + Array.from(bytes).map((b: any) => b.toString(16).padStart(2, '0')).join('');
     const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw))))
-      .map((b) => b.toString(16).padStart(2, '0'))
+      .map((b: any) => b.toString(16).padStart(2, '0'))
       .join('');
     setCreatingToken(true);
     const { error } = await supabase.from('personal_access_tokens').insert({
@@ -326,7 +326,7 @@ export default function ProfilePage() {
             {tokens.length === 0 ? (
               <p className="text-sm text-muted-foreground">No tokens yet.</p>
             ) : (
-              tokens.map((t) => (
+              tokens.map((t: any) => (
                 <div key={t.id} className="flex items-center justify-between rounded-lg border px-3 py-2">
                   <div>
                     <p className="text-sm font-medium">{t.name}</p>

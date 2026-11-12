@@ -7,7 +7,7 @@ export async function GET(
   _req: NextRequest,
   { params }: { params: { projectSlug: string; rest?: string[] } }
 ) {
-  const segments = (params.rest || []).map((s) => decodeURIComponent(s));
+  const segments = (params.rest || []).map((s: any) => decodeURIComponent(s));
   if (segments.length === 0) {
     return NextResponse.json({ error: 'Invalid APK path' }, { status: 400 });
   }
