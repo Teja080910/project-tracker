@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import webpush from 'web-push';
-import { supabaseAdmin } from '@/lib/supabase/server';
 
+const API_URL = process.env.API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://127.0.0.1:4105';
 const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? '';
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY ?? '';
 const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:no-reply@example.com';
@@ -10,6 +10,17 @@ let vapidConfigured = false;
 if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
   webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
   vapidConfigured = true;
+}
+
+type Subscription = { id: string; endpoint: string; p256dh: string; auth: string };
+
+async function api<T>(path: string, token: string): Promise<{ ok: boolean; body: T }> {
+  const response = await fetch(`${API_URL}${path}`, {
+    headers: { authorization: `Bearer ${token}` },
+    cache: 'no-store',
+  });
+  const body = (await response.json().catch(() => ({}))) as T;
+  return { ok: response.ok, body };
 }
 
 export async function POST(req: NextRequest) {
@@ -24,17 +35,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(token);
-    if (userError || !userData.user) {
+    const me = await api<{ id?: string; disabled?: boolean }>('/api/pt/me', token);
+    if (!me.ok || !me.body.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
-
-    const { data: caller } = await supabaseAdmin
-      .from('profiles')
-      .select('disabled')
-      .eq('id', userData.user.id)
-      .maybeSingle();
-    if (caller?.disabled) {
+    if (me.body.disabled) {
       return NextResponse.json({ error: 'Account disabled' }, { status: 403 });
     }
 
@@ -43,13 +48,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing userId or title' }, { status: 400 });
     }
 
-    const { data: subscriptions } = await supabaseAdmin
-      .from('push_subscriptions')
-      .select('id, endpoint, p256dh, auth')
-      .eq('user_id', userId);
-
-    if (!subscriptions || subscriptions.length === 0) {
-      return NextResponse.json({ sent: 0, removed: 0 });
+    const subscriptions = await api<{ subscriptions?: Subscription[] }>(
+      `/api/pt/push/subscriptions/${encodeURIComponent(userId)}`,
+      token,
+    );
+    if (!subscriptions.ok) {
+      return NextResponse.json({ error: 'Not allowed to notify this user' }, { status: 403 });
     }
 
     const payload = JSON.stringify({
@@ -60,31 +64,26 @@ export async function POST(req: NextRequest) {
     });
 
     let sent = 0;
-    let removed = 0;
-
+    let failed = 0;
     await Promise.all(
-      subscriptions.map(async (sub: any) => {
+      (subscriptions.body.subscriptions ?? []).map(async (subscription) => {
         try {
           await webpush.sendNotification(
-            { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-            payload
+            { endpoint: subscription.endpoint, keys: { p256dh: subscription.p256dh, auth: subscription.auth } },
+            payload,
           );
           sent += 1;
-        } catch (err) {
-          const statusCode = (err as { statusCode?: number }).statusCode;
-          if (statusCode === 404 || statusCode === 410) {
-            await supabaseAdmin.from('push_subscriptions').delete().eq('id', sub.id);
-            removed += 1;
-          } else {
-            console.error('Push send failed:', statusCode, err instanceof Error ? err.message : err);
-          }
+        } catch {
+          failed += 1;
         }
-      })
+      }),
     );
 
-    return NextResponse.json({ sent, removed });
-  } catch (err) {
-    console.error('Push API error:', err);
-    return NextResponse.json({ error: 'Push send failed' }, { status: 500 });
+    return NextResponse.json({ sent, failed });
+  } catch (error) {
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : 'Push failed' },
+      { status: 500 },
+    );
   }
 }
