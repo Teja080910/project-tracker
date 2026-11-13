@@ -10,6 +10,7 @@ interface AuthContextValue {
   session: Session | null;
   profile: Profile | null;
   loading: boolean;
+  teamAdmin: boolean;
   signOut: () => Promise<void>;
   refreshProfile: () => Promise<void>;
 }
@@ -19,6 +20,7 @@ const AuthContext = createContext<AuthContextValue>({
   session: null,
   profile: null,
   loading: true,
+  teamAdmin: false,
   signOut: async () => {},
   refreshProfile: async () => {},
 });
@@ -27,6 +29,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [teamAdmin, setTeamAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const fetchProfile = async (uid: string) => {
@@ -37,10 +40,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSession(null);
       setUser(null);
       setProfile(null);
+      setTeamAdmin(false);
       setLoading(false);
       return;
     }
     setProfile(profile);
+
+    const [memberships, ownedTeams] = await Promise.all([
+      supabase.from('team_members').select('role').eq('user_id', uid),
+      supabase.from('teams').select('id').eq('owner_id', uid),
+    ]);
+    setTeamAdmin(
+      (memberships.data ?? []).some((row: { role?: string }) => row.role === 'team_admin') ||
+        (ownedTeams.data ?? []).length > 0
+    );
   };
 
   useEffect(() => {
@@ -53,6 +66,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setSession(null);
         setUser(null);
         setProfile(null);
+        setTeamAdmin(false);
         setLoading(false);
         return;
       }
@@ -63,6 +77,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setSession(null);
         setUser(null);
         setProfile(null);
+        setTeamAdmin(false);
         setLoading(false);
         return;
       }
@@ -80,6 +95,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setSession(null);
         setUser(null);
         setProfile(null);
+        setTeamAdmin(false);
         setLoading(false);
         return;
       }
@@ -89,6 +105,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         fetchProfile(session.user.id).finally(() => mounted && setLoading(false));
       } else {
         setProfile(null);
+        setTeamAdmin(false);
         setLoading(false);
       }
     });
@@ -102,6 +119,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = async () => {
     await supabase.auth.signOut();
     setProfile(null);
+    setTeamAdmin(false);
   };
 
   const refreshProfile = async () => {
@@ -110,7 +128,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, session, profile, loading, signOut, refreshProfile }}
+      value={{ user, session, profile, loading, teamAdmin, signOut, refreshProfile }}
     >
       {children}
     </AuthContext.Provider>

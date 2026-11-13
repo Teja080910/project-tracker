@@ -50,12 +50,13 @@ import { PaginationControls } from '@/components/shared/pagination';
 import { ConfirmDeleteDialog } from '@/components/shared/confirm-delete-dialog';
 import { supabase } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth-context';
+import { isGlobalAdmin, loadTeamAccess } from '@/lib/access';
 import { sendNotificationEmail } from '@/lib/email-client';
 import { sendPushToUser } from '@/lib/push';
 import { getProjectStatusMeta, getRoleLabel, getVersionStatusMeta } from '@/lib/constants';
 import { formatDate, cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import type { Project, ProjectMember, Profile, Version, ProjectApk } from '@/lib/types';
+import type { Project, ProjectMember, Profile, Version, ProjectApk, Team } from '@/lib/types';
 
 export default function ProjectDetailPage() {
   const params = useParams();
@@ -67,6 +68,8 @@ export default function ProjectDetailPage() {
   const [members, setMembers] = useState<ProjectMember[]>([]);
   const [versions, setVersions] = useState<Version[]>([]);
   const [allProfiles, setAllProfiles] = useState<Profile[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [teamRole, setTeamRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [addMemberOpen, setAddMemberOpen] = useState(false);
   const [newMemberId, setNewMemberId] = useState('');
@@ -77,6 +80,7 @@ export default function ProjectDetailPage() {
   const [editName, setEditName] = useState('');
   const [editDescription, setEditDescription] = useState('');
   const [editClientName, setEditClientName] = useState('');
+  const [editTeamId, setEditTeamId] = useState('');
   const [saving, setSaving] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [page, setPage] = useState(1);
@@ -91,33 +95,39 @@ export default function ProjectDetailPage() {
   const [apkUploading, setApkUploading] = useState(false);
   const apkInputRef = useRef<HTMLInputElement>(null);
 
-  const isSuperAdmin = profile?.role === 'super_admin';
+  const globalAdmin = isGlobalAdmin(profile);
   const [myRole, setMyRole] = useState<string | null>(null);
-  const canManage = isSuperAdmin || myRole === 'project_admin' || project?.owner_id === user?.id;
-  const canUploadApk = canManage || myRole === 'developer';
+  const canManage =
+    globalAdmin || myRole === 'project_admin' || teamRole === 'team_admin' || project?.owner_id === user?.id;
+  const canUploadApk = canManage || myRole === 'developer' || teamRole === 'developer';
 
   const fetchProject = useCallback(async () => {
     if (!user) return;
 
     const { data: projectData } = await supabase
       .from('projects')
-      .select('*')
+      .select('*, team:teams(*)')
       .eq('slug', projectSlug)
       .maybeSingle();
-    setProject(projectData as Project | null);
-    if (!projectData) {
+    const projectRow = projectData as Project | null;
+    setProject(projectRow);
+    if (!projectRow) {
       setLoading(false);
       return;
     }
-    const pid = projectData.id;
+    const pid = projectRow.id;
 
-    const [membersRes, versionsRes] = await Promise.all([
+    const [membersRes, versionsRes, teamAccess, teamRes] = await Promise.all([
       supabase
         .from('project_members')
         .select('*, profile:profiles(*)')
         .eq('project_id', pid)
         .order('created_at', { ascending: true }),
       supabase.from('versions').select('*').eq('project_id', pid).order('created_at', { ascending: false }),
+      loadTeamAccess(user.id),
+      isGlobalAdmin(profile)
+        ? supabase.from('teams').select('*').order('name', { ascending: true })
+        : Promise.resolve({ data: [] as Team[] }),
     ]);
 
     setMembers((membersRes.data as unknown as ProjectMember[]) ?? []);
@@ -125,14 +135,26 @@ export default function ProjectDetailPage() {
 
     const myMembership = (membersRes.data as unknown as ProjectMember[])?.find((m: any) => m.user_id === user.id);
     setMyRole(myMembership?.role ?? null);
+    const myTeamRole = projectRow.team_id ? teamAccess.roles.get(projectRow.team_id) ?? null : null;
+    setTeamRole(myTeamRole);
 
-    if (isSuperAdmin || myMembership?.role === 'project_admin' || projectData.owner_id === user.id) {
+    if (isGlobalAdmin(profile)) {
+      setTeams((teamRes.data as Team[]) ?? []);
+    }
+
+    if (
+      isGlobalAdmin(profile) ||
+      myMembership?.role === 'project_admin' ||
+      myTeamRole === 'team_admin' ||
+      myTeamRole === 'owner' ||
+      projectRow.owner_id === user.id
+    ) {
       const { data: profilesData } = await supabase.from('profiles').select('*').eq('disabled', false);
       setAllProfiles((profilesData as Profile[]) ?? []);
     }
 
     setLoading(false);
-  }, [user, profile, projectSlug, isSuperAdmin]);
+  }, [user, profile, projectSlug]);
 
   useEffect(() => {
     fetchProject();
@@ -274,13 +296,15 @@ export default function ProjectDetailPage() {
       return;
     }
     setSaving(true);
+    const patch: Record<string, unknown> = {
+      name: editName.trim(),
+      description: editDescription.trim() || null,
+      client_name: editClientName.trim() || null,
+    };
+    if (globalAdmin) patch.team_id = editTeamId || null;
     const { error } = await supabase
       .from('projects')
-      .update({
-        name: editName.trim(),
-        description: editDescription.trim() || null,
-        client_name: editClientName.trim() || null,
-      })
+      .update(patch)
       .eq('id', project?.id);
     setSaving(false);
     if (error) {
@@ -354,6 +378,9 @@ export default function ProjectDetailPage() {
             >
               {statusMeta.label}
             </Badge>
+            {project.team?.name && (
+              <Badge variant="secondary" className="text-xs">{project.team.name}</Badge>
+            )}
           </div>
           {project.client_name && (
             <p className="text-sm text-muted-foreground mt-1">Client: {project.client_name}</p>
@@ -372,6 +399,7 @@ export default function ProjectDetailPage() {
               setEditName(project.name);
               setEditDescription(project.description ?? '');
               setEditClientName(project.client_name ?? '');
+              setEditTeamId(project.team_id ?? '');
             }
           }}>
             <DialogTrigger asChild>
@@ -403,6 +431,24 @@ export default function ProjectDetailPage() {
                   <Input value={editClientName} onChange={(e) => setEditClientName(e.target.value)} />
                 </div>
                 <div className="space-y-2">
+                  <label className="text-sm font-medium">Team</label>
+                  {globalAdmin ? (
+                    <Select value={editTeamId || 'none'} onValueChange={(value) => setEditTeamId(value === 'none' ? '' : value)}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">No team</SelectItem>
+                        {teams.map((team) => (
+                          <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <p className="text-sm text-muted-foreground flex items-center h-9">
+                      {project.team?.name ?? 'No team'}
+                    </p>
+                  )}
+                </div>
+                <div className="space-y-2">
                   <label className="text-sm font-medium">Status</label>
                   <Select
                     value={project.status}
@@ -428,7 +474,7 @@ export default function ProjectDetailPage() {
                     Save Changes
                   </Button>
                 </div>
-                {isSuperAdmin && (
+                {canManage && (
                   <div className="pt-4 border-t">
                     <Button variant="destructive" size="sm" onClick={() => setDeleteProjectOpen(true)}>
                       <Trash2 className="h-4 w-4 mr-2" />

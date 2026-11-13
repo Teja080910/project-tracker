@@ -12,6 +12,7 @@ import { APP_NAME } from '@/lib/app-config';
 import { ensureServiceWorker } from '@/lib/push';
 
 const PAGE_TITLES: Record<string, string> = {
+  teams: 'Teams',
   projects: 'Projects',
   tasks: 'Task',
   calendar: 'Calendar',

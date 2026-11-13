@@ -332,8 +332,12 @@ export function Topbar() {
 }
 
 function MobileNav({ onNavigate }: { onNavigate: () => void }) {
-  const { profile } = useAuth();
-  const isAdmin = profile?.role === 'super_admin' || profile?.role === 'project_admin';
+  const { profile, teamAdmin } = useAuth();
+  const isAdmin =
+    profile?.role === 'super_admin' ||
+    profile?.role === 'admin' ||
+    profile?.role === 'project_admin' ||
+    teamAdmin;
   const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
@@ -367,6 +371,7 @@ function MobileNav({ onNavigate }: { onNavigate: () => void }) {
 
   const items = [
     { href: '/app', label: 'Dashboard' },
+    { href: '/app/teams', label: 'Teams' },
     { href: '/app/projects', label: 'Projects' },
     { href: '/app/calendar', label: 'Calendar' },
     { href: '/app/notifications', label: 'Notifications' },

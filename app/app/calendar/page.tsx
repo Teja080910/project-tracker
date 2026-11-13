@@ -25,17 +25,8 @@ export default function CalendarPage() {
   const fetchTasks = useCallback(async () => {
     if (!user || !profile) return;
 
-    let projectIds: string[] = [];
-    if (profile?.role === 'super_admin') {
-      const { data: allProjects } = await supabase.from('projects').select('id');
-      projectIds = (allProjects ?? []).map((p: any) => (p as { id: string }).id);
-    } else {
-      const { data: memberships } = await supabase
-        .from('project_members')
-        .select('project_id')
-        .eq('user_id', user.id);
-      projectIds = memberships?.map((m: any) => m.project_id) ?? [];
-    }
+    const { data: visibleProjects } = await supabase.from('projects').select('id');
+    const projectIds = (visibleProjects ?? []).map((p: any) => (p as { id: string }).id);
 
     if (projectIds.length === 0) {
       setTasks([]);

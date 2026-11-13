@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth-context';
+import { isGlobalAdmin, loadTeamAccess } from '@/lib/access';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -41,7 +42,7 @@ export default function NewVersionPage() {
     (async () => {
       const { data: projectData } = await supabase
         .from('projects')
-        .select('id')
+        .select('id, team_id, owner_id')
         .eq('slug', projectSlug)
         .maybeSingle();
       if (!projectData) {
@@ -49,18 +50,26 @@ export default function NewVersionPage() {
         return;
       }
       setProjectId(projectData.id);
-      if (profile.role === 'super_admin') {
+      if (isGlobalAdmin(profile) || projectData.owner_id === user.id) {
         setCanManage(true);
         setChecking(false);
         return;
       }
-      const { data: membership } = await supabase
-        .from('project_members')
-        .select('role')
-        .eq('project_id', projectData.id)
-        .eq('user_id', user.id)
-        .maybeSingle();
-      setCanManage(membership?.role === 'project_admin' || membership?.role === 'super_admin');
+      const [membershipRes, teamAccess] = await Promise.all([
+        supabase
+          .from('project_members')
+          .select('role')
+          .eq('project_id', projectData.id)
+          .eq('user_id', user.id)
+          .maybeSingle(),
+        loadTeamAccess(user.id),
+      ]);
+      const teamRole = projectData.team_id ? teamAccess.roles.get(projectData.team_id) : undefined;
+      setCanManage(
+        membershipRes.data?.role === 'project_admin' ||
+          teamRole === 'team_admin' ||
+          teamRole === 'owner'
+      );
       setChecking(false);
     })();
   }, [user, profile, projectSlug]);

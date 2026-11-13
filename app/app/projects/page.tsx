@@ -29,10 +29,11 @@ import { EmptyState } from '@/components/shared/empty-state';
 import { PaginationControls } from '@/components/shared/pagination';
 import { supabase } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth-context';
+import { isGlobalAdmin, loadTeamAccess } from '@/lib/access';
 import { getProjectStatusMeta } from '@/lib/constants';
 import { formatDate } from '@/lib/utils';
 import { toast } from 'sonner';
-import type { Project } from '@/lib/types';
+import type { Project, Team } from '@/lib/types';
 
 const colorClasses: Record<string, string> = {
   gray: 'bg-gray-500/10 text-gray-600 dark:text-gray-400 border-gray-500/20',
@@ -45,8 +46,11 @@ const colorClasses: Record<string, string> = {
 export default function ProjectsPage() {
   const { profile, user } = useAuth();
   const [projects, setProjects] = useState<Project[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [editableTeamIds, setEditableTeamIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [filterTeam, setFilterTeam] = useState('all');
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 10;
 
@@ -56,26 +60,26 @@ export default function ProjectsPage() {
   const [description, setDescription] = useState('');
   const [clientName, setClientName] = useState('');
   const [status, setStatus] = useState('active');
+  const [teamId, setTeamId] = useState('');
   const [creating, setCreating] = useState(false);
+
+  const globalAdmin = isGlobalAdmin(profile);
+  const editableTeams = globalAdmin ? teams : teams.filter((team) => editableTeamIds.has(team.id));
 
   const fetchProjects = useCallback(async () => {
     if (!user || !profile) return;
-    let query = supabase.from('projects').select('*').order('created_at', { ascending: false });
-    if (profile?.role !== 'super_admin') {
-      const { data: memberships } = await supabase
-        .from('project_members')
-        .select('project_id')
-        .eq('user_id', user.id);
-      const projectIds = memberships?.map((m: any) => m.project_id) ?? [];
-      if (projectIds.length === 0) {
-        setProjects([]);
-        setLoading(false);
-        return;
-      }
-      query = supabase.from('projects').select('*').in('id', projectIds).order('created_at', { ascending: false });
+    const [{ data }, teamsRes] = await Promise.all([
+      supabase.from('projects').select('*, team:teams(*)').order('created_at', { ascending: false }),
+      supabase.from('teams').select('*').order('name', { ascending: true }),
+    ]);
+    setProjects((data as unknown as Project[]) ?? []);
+    setTeams((teamsRes.data as Team[]) ?? []);
+    if (isGlobalAdmin(profile)) {
+      setEditableTeamIds(new Set(((teamsRes.data as Team[]) ?? []).map((team) => team.id)));
+    } else {
+      const access = await loadTeamAccess(user.id);
+      setEditableTeamIds(access.adminTeamIds);
     }
-    const { data } = await query;
-    setProjects((data as Project[]) ?? []);
     setLoading(false);
   }, [user, profile]);
 
@@ -83,14 +87,23 @@ export default function ProjectsPage() {
     fetchProjects();
   }, [fetchProjects]);
 
+  const openCreateModal = () => {
+    setTeamId(editableTeams.length === 1 ? editableTeams[0]!.id : '');
+    setModalOpen(true);
+  };
+
   const createProject = async () => {
     if (!user) return;
-    if (profile && profile.role !== 'super_admin' && profile.role !== 'admin') {
-      toast.error('Only admins can create projects');
+    if (!globalAdmin && editableTeams.length === 0) {
+      toast.error('Only admins and team admins can create projects');
       return;
     }
     if (!name.trim()) {
       toast.error('Project name is required');
+      return;
+    }
+    if (!teamId) {
+      toast.error('Please select a team');
       return;
     }
     setCreating(true);
@@ -101,6 +114,7 @@ export default function ProjectsPage() {
         description: description.trim() || null,
         client_name: clientName.trim() || null,
         status,
+        team_id: teamId,
         owner_id: user.id,
       })
       .select()
@@ -112,11 +126,13 @@ export default function ProjectsPage() {
     }
 
     try {
-      await supabase.from('project_members').insert({
-        project_id: data.id,
-        user_id: user.id,
-        role: 'project_admin',
-      });
+      if (globalAdmin) {
+        await supabase.from('project_members').insert({
+          project_id: data.id,
+          user_id: user.id,
+          role: 'project_admin',
+        });
+      }
       await supabase.from('activity_logs').insert({
         project_id: data.id,
         user_id: user.id,
@@ -129,6 +145,7 @@ export default function ProjectsPage() {
       setDescription('');
       setClientName('');
       setStatus('active');
+      setTeamId('');
       await fetchProjects();
       toast.success('Project created');
     } catch (err) {
@@ -139,9 +156,10 @@ export default function ProjectsPage() {
 
   const filtered = projects.filter(
     (p) =>
-      p.name.toLowerCase().includes(search.toLowerCase()) ||
-      (p.description?.toLowerCase().includes(search.toLowerCase()) ?? false) ||
-      (p.client_name?.toLowerCase().includes(search.toLowerCase()) ?? false)
+      (filterTeam === 'all' || p.team_id === filterTeam) &&
+      (p.name.toLowerCase().includes(search.toLowerCase()) ||
+        (p.description?.toLowerCase().includes(search.toLowerCase()) ?? false) ||
+        (p.client_name?.toLowerCase().includes(search.toLowerCase()) ?? false))
   );
 
   const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -170,8 +188,8 @@ export default function ProjectsPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Projects</h1>
           <p className="text-sm text-muted-foreground mt-1">{projects.length} total</p>
         </div>
-        {(profile?.role === 'super_admin' || profile?.role === 'admin') && (
-          <Button className="animate-fade-in-scale" onClick={() => setModalOpen(true)}>
+        {editableTeams.length > 0 && (
+          <Button className="animate-fade-in-scale" onClick={openCreateModal}>
             <Plus className="h-4 w-4 mr-2" />
             New Project
           </Button>
@@ -185,6 +203,24 @@ export default function ProjectsPage() {
             <DialogTitle>New Project</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="team">Team *</Label>
+              <Select value={teamId} onValueChange={setTeamId}>
+                <SelectTrigger id="team">
+                  <SelectValue placeholder="Select a team" />
+                </SelectTrigger>
+                <SelectContent>
+                  {editableTeams.map((team) => (
+                    <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {editableTeams.length === 0 && (
+                <p className="text-xs text-muted-foreground">
+                  You need to be a team admin to create projects.
+                </p>
+              )}
+            </div>
             <div className="space-y-2">
               <Label htmlFor="name">Name *</Label>
               <Input
@@ -242,14 +278,27 @@ export default function ProjectsPage() {
         </DialogContent>
       </Dialog>
 
-      <div className="relative max-w-sm animate-fade-in-up stagger-1">
-        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Search projects..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="pl-9 bg-secondary/40 border-transparent focus-visible:bg-card transition-colors duration-200"
-        />
+      <div className="flex flex-col sm:flex-row gap-3 animate-fade-in-up stagger-1">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search projects..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9 bg-secondary/40 border-transparent focus-visible:bg-card transition-colors duration-200"
+          />
+        </div>
+        <Select value={filterTeam} onValueChange={setFilterTeam}>
+          <SelectTrigger className="w-full sm:w-52">
+            <SelectValue placeholder="All teams" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All teams</SelectItem>
+            {teams.map((team) => (
+              <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {filtered.length === 0 ? (
@@ -260,8 +309,8 @@ export default function ProjectsPage() {
               title={search ? "No projects found" : "No projects yet"}
               description={search ? "Try a different search term" : "Create your first project to get started"}
               action={
-                !search && (profile?.role === 'super_admin' || profile?.role === 'admin') ? (
-                  <Button onClick={() => setModalOpen(true)}>New Project</Button>
+                !search && editableTeams.length > 0 ? (
+                  <Button onClick={openCreateModal}>New Project</Button>
                 ) : undefined
               }
             />
@@ -292,6 +341,9 @@ export default function ProjectsPage() {
                       <p className="text-xs text-muted-foreground line-clamp-2 mb-3">{project.description}</p>
                     )}
                     <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                      {project.team?.name && (
+                        <Badge variant="secondary" className="text-[10px] font-normal">{project.team.name}</Badge>
+                      )}
                       {project.client_name && <span>Client: {project.client_name}</span>}
                       <span className="ml-auto">{formatDate(project.created_at)}</span>
                     </div>

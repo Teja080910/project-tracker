@@ -1,4 +1,5 @@
 export type Role = 'super_admin' | 'admin' | 'project_admin' | 'developer' | 'tester' | 'viewer';
+export type TeamRole = 'team_admin' | 'developer' | 'tester' | 'viewer';
 export type ProjectStatus = 'active' | 'completed' | 'archived';
 export type VersionStatus = 'active' | 'released' | 'archived';
 export type TaskType = 'task' | 'bug' | 'story' | 'issue';
@@ -38,6 +39,25 @@ export interface ProjectApk {
   uploader?: Profile | null;
 }
 
+export interface Team {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  owner_id: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TeamMember {
+  id: string;
+  team_id: string;
+  user_id: string;
+  role: TeamRole;
+  created_at: string;
+  profile?: Profile;
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -45,9 +65,11 @@ export interface Project {
   description: string | null;
   client_name: string | null;
   status: ProjectStatus;
+  team_id: string | null;
   owner_id: string;
   created_at: string;
   updated_at: string;
+  team?: Team | null;
 }
 
 export interface ProjectMember {

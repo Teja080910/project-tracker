@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   FolderKanban,
   Users,
+  UsersRound,
   Bell,
   Settings,
   User,
@@ -23,6 +24,7 @@ import { APP_NAME, APP_LOGO_URL, APP_INITIAL } from '@/lib/app-config';
 
 const navItems = [
   { href: '/app', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/app/teams', label: 'Teams', icon: UsersRound },
   { href: '/app/projects', label: 'Projects', icon: FolderKanban },
   { href: '/app/calendar', label: 'Calendar', icon: CalendarDays },
   { href: '/app/notifications', label: 'Notifications', icon: Bell },
@@ -31,8 +33,12 @@ const navItems = [
 
 export function Sidebar() {
   const pathname = usePathname();
-  const { profile } = useAuth();
-  const isAdmin = profile?.role === 'super_admin' || profile?.role === 'project_admin';
+  const { profile, teamAdmin } = useAuth();
+  const isAdmin =
+    profile?.role === 'super_admin' ||
+    profile?.role === 'admin' ||
+    profile?.role === 'project_admin' ||
+    teamAdmin;
   const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {

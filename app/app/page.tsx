@@ -47,69 +47,17 @@ export default function DashboardPage() {
   const fetchDashboard = useCallback(async () => {
     if (!user || !profile) return;
 
-    let memberProjectIds: string[] = [];
-    if (profile?.role !== 'super_admin') {
-      const { data: memberships } = await supabase
-        .from('project_members')
-        .select('project_id')
-        .eq('user_id', user.id);
-      memberProjectIds = memberships?.map((m: any) => m.project_id) ?? [];
-    }
+    const { data: projectRows } = await supabase
+      .from('projects')
+      .select('*, team:teams(*)')
+      .order('created_at', { ascending: false });
+    const visibleProjects = (projectRows as Project[]) ?? [];
+    setRecentProjects(visibleProjects.slice(0, 5));
 
-    const [projectsRes, activeProjectsRes, myProjectsRes] = await Promise.all([
-      profile?.role === 'super_admin'
-        ? supabase.from('projects').select('id', { count: 'exact', head: true })
-        : supabase.from('projects').select('id', { count: 'exact', head: true }).in('id', memberProjectIds),
-      profile?.role === 'super_admin'
-        ? supabase.from('projects').select('id', { count: 'exact', head: true }).eq('status', 'active')
-        : supabase.from('projects').select('id', { count: 'exact', head: true }).eq('status', 'active').in('id', memberProjectIds),
-      profile?.role === 'super_admin'
-        ? supabase.from('projects').select('*').order('created_at', { ascending: false }).limit(5)
-        : supabase
-            .from('project_members')
-            .select('project:projects(*)')
-            .eq('user_id', user.id)
-            .order('created_at', { ascending: false })
-            .limit(5),
-    ]);
+    const projectIds = visibleProjects.map((project) => project.id);
+    const fallbackId = '00000000-0000-0000-0000-000000000000';
 
-    const recentProjectsData =
-      (profile?.role === 'super_admin'
-        ? (myProjectsRes.data as unknown as Project[])
-        : (myProjectsRes.data?.map((m: any) => m.project) as unknown as Project[])) ?? [];
-    setRecentProjects(recentProjectsData);
-
-    const projectIds = recentProjectsData.map((p: any) => p.id);
-
-    let openTasks = 0,
-      inProgressTasks = 0,
-      completedTasks = 0,
-      cancelledTasks = 0;
-
-    if (projectIds.length > 0) {
-      const [openRes, inProgressRes, completedRes, cancelledRes] = await Promise.all([
-        supabase.from('tasks').select('id', { count: 'exact', head: true }).in('project_id', projectIds).eq('status', 'open').is('deleted_at', null),
-        supabase.from('tasks').select('id', { count: 'exact', head: true }).in('project_id', projectIds).eq('status', 'in_progress').is('deleted_at', null),
-        supabase.from('tasks').select('id', { count: 'exact', head: true }).in('project_id', projectIds).eq('status', 'completed').is('deleted_at', null),
-        supabase.from('tasks').select('id', { count: 'exact', head: true }).in('project_id', projectIds).eq('status', 'cancelled').is('deleted_at', null),
-      ]);
-      openTasks = openRes.count ?? 0;
-      inProgressTasks = inProgressRes.count ?? 0;
-      completedTasks = completedRes.count ?? 0;
-      cancelledTasks = cancelledRes.count ?? 0;
-    }
-
-    setStats({
-      totalProjects: projectsRes.count ?? 0,
-      activeProjects: activeProjectsRes.count ?? 0,
-      openTasks,
-      inProgressTasks,
-      completedTasks,
-      cancelledTasks,
-      myTasks: 0,
-    });
-
-    const [myTasksRes, recentTasksRes] = await Promise.all([
+    const [myTasksRes, recentTasksRes, openRes, inProgressRes, completedRes, cancelledRes] = await Promise.all([
       supabase
         .from('tasks')
         .select('*, project:projects(*), assignee:profiles!assignee_id(*), reporter:profiles!reporter_id(*)')
@@ -120,19 +68,28 @@ export default function DashboardPage() {
       supabase
         .from('tasks')
         .select('*, project:projects(*), assignee:profiles!assignee_id(*), reporter:profiles!reporter_id(*)')
-        .in('project_id', projectIds.length > 0 ? projectIds : ['00000000-0000-0000-0000-000000000000'])
+        .in('project_id', projectIds.length > 0 ? projectIds : [fallbackId])
         .is('deleted_at', null)
         .order('updated_at', { ascending: false })
         .limit(5),
+      supabase.from('tasks').select('id', { count: 'exact', head: true }).in('project_id', projectIds.length > 0 ? projectIds : [fallbackId]).eq('status', 'open').is('deleted_at', null),
+      supabase.from('tasks').select('id', { count: 'exact', head: true }).in('project_id', projectIds.length > 0 ? projectIds : [fallbackId]).eq('status', 'in_progress').is('deleted_at', null),
+      supabase.from('tasks').select('id', { count: 'exact', head: true }).in('project_id', projectIds.length > 0 ? projectIds : [fallbackId]).eq('status', 'completed').is('deleted_at', null),
+      supabase.from('tasks').select('id', { count: 'exact', head: true }).in('project_id', projectIds.length > 0 ? projectIds : [fallbackId]).eq('status', 'cancelled').is('deleted_at', null),
     ]);
 
     const myTasksData = (myTasksRes.data ?? []) as unknown as Task[];
     setMyAssignedTasks(myTasksData);
     setRecentTasks((recentTasksRes.data ?? []) as unknown as Task[]);
-
-    if (stats) {
-      setStats((prev) => ({ ...prev!, myTasks: myTasksData.length }));
-    }
+    setStats({
+      totalProjects: visibleProjects.length,
+      activeProjects: visibleProjects.filter((project) => project.status === 'active').length,
+      openTasks: openRes.count ?? 0,
+      inProgressTasks: inProgressRes.count ?? 0,
+      completedTasks: completedRes.count ?? 0,
+      cancelledTasks: cancelledRes.count ?? 0,
+      myTasks: myTasksData.length,
+    });
 
     setLoading(false);
   }, [user, profile]);
@@ -334,9 +291,9 @@ export default function DashboardPage() {
                     </div>
                     <div className="min-w-0">
                       <span className="font-semibold text-sm group-hover:text-foreground block truncate">{project.name}</span>
-                      {project.client_name && (
-                        <span className="text-[10px] text-muted-foreground">{project.client_name}</span>
-                      )}
+                      <span className="text-[10px] text-muted-foreground">
+                        {project.team?.name ?? project.client_name ?? 'No team'}
+                      </span>
                     </div>
                   </div>
                   {project.description && (

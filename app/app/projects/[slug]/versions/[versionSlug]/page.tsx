@@ -160,6 +160,17 @@ function VersionDetailContent() {
       .select('profile:profiles(*)')
       .eq('project_id', projectData.id);
     const memberProfiles = (membersData?.map((m: any) => m.profile) as unknown as Profile[]) ?? [];
+    if (projectData.team_id) {
+      const { data: teamMembersData } = await supabase
+        .from('team_members')
+        .select('profile:profiles(*)')
+        .eq('team_id', projectData.team_id);
+      for (const row of (teamMembersData ?? []) as Array<{ profile?: Profile }>) {
+        if (row.profile && !memberProfiles.some((p) => p.id === row.profile!.id)) {
+          memberProfiles.push(row.profile);
+        }
+      }
+    }
     const { data: ownerData } = await supabase.from('profiles').select('*').eq('id', projectData.owner_id).maybeSingle();
     if (ownerData && !memberProfiles.some((p: any) => p.id === ownerData.id)) {
       memberProfiles.push(ownerData as Profile);

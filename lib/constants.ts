@@ -59,6 +59,20 @@ export const ROLES = [
   { value: 'viewer', label: 'Viewer' },
 ] as const;
 
+export const PROJECT_ROLES = [
+  { value: 'project_admin', label: 'Project Admin' },
+  { value: 'developer', label: 'Developer' },
+  { value: 'tester', label: 'Tester' },
+  { value: 'viewer', label: 'Viewer' },
+] as const;
+
+export const TEAM_ROLES = [
+  { value: 'team_admin', label: 'Team Admin' },
+  { value: 'developer', label: 'Developer' },
+  { value: 'tester', label: 'Tester' },
+  { value: 'viewer', label: 'Viewer' },
+] as const;
+
 export function getTaskTypeMeta(type: string) {
   return TASK_TYPES.find((t) => t.value === type) ?? TASK_TYPES[0];
 }
@@ -79,6 +93,8 @@ export function getVersionStatusMeta(status: string) {
   return VERSION_STATUSES.find((s) => s.value === status) ?? VERSION_STATUSES[0];
 }
 
+const ALL_ROLE_LABELS = [...ROLES, ...TEAM_ROLES] as { value: string; label: string }[];
+
 export function getRoleLabel(role: string) {
-  return ROLES.find((r) => r.value === role)?.label ?? role;
+  return ALL_ROLE_LABELS.find((r) => r.value === role)?.label ?? role;
 }

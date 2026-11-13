@@ -59,6 +59,7 @@ import { ConfirmDeleteDialog } from '@/components/shared/confirm-delete-dialog';
 import { DatePicker } from '@/components/shared/date-picker';
 import { supabase } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth-context';
+import { isGlobalAdmin } from '@/lib/access';
 import { sendNotificationEmail } from '@/lib/email-client';
 import { sendPushToUser } from '@/lib/push';
 import { TASK_TYPES, TASK_STATUSES, TASK_PRIORITIES, getRoleLabel } from '@/lib/constants';
@@ -107,6 +108,7 @@ export default function TaskDetailPage() {
   const [deleteTaskOpen, setDeleteTaskOpen] = useState(false);
   const [deleteTaskLoading, setDeleteTaskLoading] = useState(false);
   const [myRole, setMyRole] = useState<string | null>(null);
+  const [teamRole, setTeamRole] = useState<string | null>(null);
   const [activityPage, setActivityPage] = useState(1);
   const [showAllActivity, setShowAllActivity] = useState(false);
   const [assigneeOpen, setAssigneeOpen] = useState(false);
@@ -176,7 +178,7 @@ export default function TaskDetailPage() {
     setTask(task);
     setEditTitle(task.title);
 
-    const [commentsRes, activityRes, membersRes, versionsRes, ownerRes, myMembershipRes] = await Promise.all([
+    const [commentsRes, activityRes, membersRes, versionsRes, ownerRes, myMembershipRes, teamMembershipRes, teamMembersRes] = await Promise.all([
       supabase
         .from('comments')
         .select('*, profile:profiles(*)')
@@ -199,15 +201,31 @@ export default function TaskDetailPage() {
         .eq('project_id', task.project_id)
         .eq('user_id', user.id)
         .maybeSingle(),
+      task.project?.team_id
+        ? supabase
+            .from('team_members')
+            .select('role')
+            .eq('team_id', task.project.team_id)
+            .eq('user_id', user.id)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
+      task.project?.team_id
+        ? supabase
+            .from('team_members')
+            .select('profile:profiles(*)')
+            .eq('team_id', task.project.team_id)
+        : Promise.resolve({ data: [] }),
     ]);
 
     const myMembership = (myMembershipRes.data as { role: string } | null) ?? null;
-    if (profile?.role !== 'super_admin' && !myMembership) {
+    const myTeamMembership = (teamMembershipRes.data as { role: string } | null) ?? null;
+    if (!isGlobalAdmin(profile) && !myMembership && !myTeamMembership) {
       setAccessDenied(true);
       setLoading(false);
       return;
     }
     setMyRole(myMembership?.role ?? null);
+    setTeamRole(myTeamMembership?.role ?? null);
 
     const commentRows = (commentsRes.data as unknown as Comment[]) ?? [];
     setComments(commentRows);
@@ -223,6 +241,11 @@ export default function TaskDetailPage() {
     }
     setActivityLogs((activityRes.data as unknown as ActivityLog[]) ?? []);
     const memberProfiles = (membersRes.data?.map((m: any) => m.profile) as unknown as Profile[]) ?? [];
+    for (const row of (teamMembersRes.data ?? []) as Array<{ profile?: Profile }>) {
+      if (row.profile && !memberProfiles.some((p) => p.id === row.profile!.id)) {
+        memberProfiles.push(row.profile);
+      }
+    }
     // Include the project owner (may not be a project_member row)
     if (ownerRes.data && !memberProfiles.some((p: any) => p.id === ownerRes.data.id)) {
       memberProfiles.push(ownerRes.data as Profile);
@@ -818,8 +841,9 @@ export default function TaskDetailPage() {
     setDeleteTaskOpen(false);
   };
 
-  const canEdit = myRole === 'project_admin' || profile?.role === 'super_admin' || task?.reporter_id === user?.id;
-  const canDelete = myRole === 'project_admin' || profile?.role === 'super_admin';
+  const isProjectAdmin = myRole === 'project_admin' || teamRole === 'team_admin' || teamRole === 'owner';
+  const canEdit = isProjectAdmin || isGlobalAdmin(profile) || task?.reporter_id === user?.id;
+  const canDelete = isProjectAdmin || isGlobalAdmin(profile);
   const backHref = task?.version
     ? `/app/projects/${task?.project?.slug ?? task?.project_id}/versions/${task.version.slug}`
     : `/app/projects/${task?.project?.slug ?? task?.project_id}`;

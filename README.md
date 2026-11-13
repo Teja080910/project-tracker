@@ -122,7 +122,8 @@ UPDATE public.profiles SET role = 'super_admin' WHERE email = 'admin@example.com
 
 ## Features
 
-- **Projects** — Create and manage projects with status tracking
+- **Teams** — Admins create teams; each team has its own projects and members
+- **Projects** — Create and manage team projects with status tracking
 - **Versions** — Organize work into versions/releases within projects
 - **Tasks** — Track tasks, bugs, stories, and issues with priorities and assignees
 - **Comments** — Discuss tasks with threaded comments
@@ -130,8 +131,9 @@ UPDATE public.profiles SET role = 'super_admin' WHERE email = 'admin@example.com
 - **Notifications** — In-app notifications for assignments, status changes, and comments
 - **Activity Log** — Audit trail of all actions
 - **Global Search** — Search across projects, tasks, and users
-- **User Management** — Super admins can create users, change roles, and disable accounts
-- **Role-Based Access** — 5 roles: super_admin, project_admin, developer, tester, viewer
+- **User Management** — Admins can create users; super admins can change global roles and disable accounts
+- **Role-Based Access** — Super admin (everything), admin (teams/projects), team admin (everything inside a team), project admin (everything inside a project), developer, tester, viewer
+- **Move Projects** — Global admins can move a project from one team to another
 - **Dark Mode** — Light/dark theme toggle
 
 ## Scripts

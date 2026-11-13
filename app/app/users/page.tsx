@@ -28,6 +28,7 @@ import { EmptyState } from '@/components/shared/empty-state';
 import { PaginationControls } from '@/components/shared/pagination';
 import { supabase } from '@/lib/supabase/client';
 import { useAuth } from '@/lib/auth-context';
+import { isGlobalAdmin } from '@/lib/access';
 import { ROLES, getRoleLabel } from '@/lib/constants';
 import { formatDate } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -35,7 +36,7 @@ import Link from 'next/link';
 import type { Profile } from '@/lib/types';
 
 export default function UsersPage() {
-  const { profile, user } = useAuth();
+  const { profile, user, teamAdmin } = useAuth();
   const [users, setUsers] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -49,18 +50,20 @@ export default function UsersPage() {
   const PAGE_SIZE = 10;
 
   const isSuperAdmin = profile?.role === 'super_admin';
-  const canManageUsers = isSuperAdmin || profile?.role === 'project_admin';
+  const globalAdmin = isGlobalAdmin(profile);
+  const canManageUsers = globalAdmin || profile?.role === 'project_admin' || teamAdmin;
 
   const fetchUsers = useCallback(async () => {
-    if (profile?.role === 'super_admin') {
+    if (globalAdmin) {
       const { data } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
       setUsers((data as Profile[]) ?? []);
     } else {
-      const { data: memberships } = await supabase
-        .from('project_members')
-        .select('project_id')
-        .eq('user_id', user?.id ?? '');
-      const projectIds = memberships?.map((m: any) => m.project_id) ?? [];
+      const [projectMemberships, teamMemberships] = await Promise.all([
+        supabase.from('project_members').select('project_id').eq('user_id', user?.id ?? ''),
+        supabase.from('team_members').select('team_id').eq('user_id', user?.id ?? ''),
+      ]);
+      const projectIds = projectMemberships.data?.map((m: any) => m.project_id) ?? [];
+      const teamIds = teamMemberships.data?.map((m: any) => m.team_id) ?? [];
 
       const memberIds = new Set<string>();
       if (projectIds.length > 0) {
@@ -68,6 +71,13 @@ export default function UsersPage() {
           .from('project_members')
           .select('user_id')
           .in('project_id', projectIds);
+        memberRows?.forEach((m: any) => memberIds.add(m.user_id));
+      }
+      if (teamIds.length > 0) {
+        const { data: memberRows } = await supabase
+          .from('team_members')
+          .select('user_id')
+          .in('team_id', teamIds);
         memberRows?.forEach((m: any) => memberIds.add(m.user_id));
       }
 
@@ -89,7 +99,7 @@ export default function UsersPage() {
       }
     }
     setLoading(false);
-  }, [profile, user]);
+  }, [globalAdmin, user]);
 
   useEffect(() => {
     fetchUsers();
@@ -108,7 +118,7 @@ export default function UsersPage() {
 
   const availableRoles = isSuperAdmin
     ? ROLES
-    : ROLES.filter((r: any) => r.value !== 'super_admin' && r.value !== 'admin' && r.value !== 'project_admin');
+    : ROLES.filter((r: any) => r.value === 'developer' || r.value === 'tester' || r.value === 'viewer');
 
   if (!canManageUsers) {
     return (
@@ -277,7 +287,7 @@ export default function UsersPage() {
                 ) : (
                   <Badge variant="outline" className="text-xs h-8 px-2 flex items-center">{getRoleLabel(u.role)}</Badge>
                 )}
-                {isSuperAdmin && u.id !== user?.id && (
+                {globalAdmin && u.id !== user?.id && (
                   <Button
                     variant="ghost"
                     size="sm"

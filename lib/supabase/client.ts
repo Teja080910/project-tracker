@@ -66,6 +66,7 @@ type Filter = { column: string; value: unknown };
 type InFilter = { column: string; values: unknown[] };
 
 const RELATION_FK: Record<string, string> = {
+  team: 'team_id',
   project: 'project_id',
   version: 'version_id',
   assignee: 'assignee_id',
