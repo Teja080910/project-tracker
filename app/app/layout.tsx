@@ -28,7 +28,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
   useEffect(() => {
-    const segment = pathname.split('/').filter(Boolean)[1] ?? '';
+    const segment = (pathname ?? '').split('/').filter(Boolean)[1] ?? '';
     const label = PAGE_TITLES[segment] ?? 'Dashboard';
     document.title = `${label} · ${APP_NAME}`;
   }, [pathname]);
