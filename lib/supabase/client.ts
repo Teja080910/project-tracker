@@ -31,16 +31,48 @@ export type QueryResult<T = any> = {
 
 type Row = Record<string, unknown>;
 
-async function getToken(): Promise<string | null> {
-  if (typeof window === 'undefined') return null;
+let tokenCache: { token: string; expiresAt: number } | null = null;
+let tokenPending: Promise<string | null> | null = null;
+
+function jwtExpiry(token: string): number {
   try {
-    const response = await fetch(`${AUTH_URL}/api/auth/token`, { credentials: 'include' });
-    if (!response.ok) return null;
-    const data = (await response.json()) as { token?: string };
-    return data.token ?? null;
+    const payload = JSON.parse(atob(token.split('.')[1] ?? '')) as { exp?: number };
+    return payload.exp ? payload.exp * 1000 : 0;
   } catch {
-    return null;
+    return 0;
   }
+}
+
+async function getToken(force = false): Promise<string | null> {
+  if (typeof window === 'undefined') return null;
+  if (!force && tokenCache && Date.now() < tokenCache.expiresAt) return tokenCache.token;
+  if (!force && tokenPending) return tokenPending;
+
+  tokenPending = (async () => {
+    try {
+      const response = await fetch(`${AUTH_URL}/api/auth/token`, {
+        credentials: 'include',
+        cache: 'no-store',
+      });
+      if (!response.ok) {
+        tokenCache = null;
+        return null;
+      }
+      const data = (await response.json()) as { token?: string };
+      if (!data.token) return null;
+      const expiry = jwtExpiry(data.token);
+      tokenCache = {
+        token: data.token,
+        expiresAt: expiry > 0 ? Math.min(expiry - 60_000, Date.now() + 5 * 60_000) : Date.now() + 60_000,
+      };
+      return data.token;
+    } catch {
+      return null;
+    } finally {
+      tokenPending = null;
+    }
+  })();
+  return tokenPending;
 }
 
 function toError(response: Response, body: unknown): QueryError {
@@ -51,12 +83,17 @@ function toError(response: Response, body: unknown): QueryError {
   };
 }
 
-async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
+async function apiFetch(path: string, init: RequestInit = {}, retry = true): Promise<Response> {
   const token = await getToken();
   const headers = new Headers(init.headers);
   if (token) headers.set('authorization', `Bearer ${token}`);
   if (init.body && !headers.has('content-type')) headers.set('content-type', 'application/json');
-  return fetch(`${API_URL}${path}`, { ...init, headers });
+  const response = await fetch(`${API_URL}${path}`, { ...init, headers });
+  if (response.status === 401 && retry) {
+    const fresh = await getToken(true);
+    if (fresh && fresh !== token) return apiFetch(path, init, false);
+  }
+  return response;
 }
 
 const readCache = new Map<string, { at: number; text: string }>();
@@ -469,16 +506,46 @@ class Channel {
 
 const channels = new Set<Channel>();
 
-async function fetchSession() {
+type SessionUser = {
+  id: string;
+  email: string;
+  user_metadata: Record<string, unknown>;
+  app_metadata: { role: string };
+  aud: string;
+  role: string;
+  created_at: string;
+  image: unknown;
+  name: string;
+};
+
+type SessionValue = {
+  access_token: string;
+  refresh_token: string;
+  expires_at: number;
+  user: SessionUser;
+};
+
+let sessionCache: { at: number; value: SessionValue | null } | null = null;
+const SESSION_CACHE_MS = 3000;
+
+async function fetchSession(force = false): Promise<SessionValue | null> {
+  if (!force && sessionCache && Date.now() - sessionCache.at < SESSION_CACHE_MS) {
+    return sessionCache.value;
+  }
   try {
     const response = await fetch(`${AUTH_URL}/api/auth/get-session`, { credentials: 'include', cache: 'no-store' });
-    if (!response.ok) return null;
+    if (!response.ok) {
+      sessionCache = { at: Date.now(), value: null };
+      return null;
+    }
     const body = (await response.json()) as { session?: Row; user?: Row } | null;
-    if (!body?.session || !body.user) return null;
+    if (!body?.session || !body.user) {
+      sessionCache = { at: Date.now(), value: null };
+      return null;
+    }
 
-    const tokenRes = await fetch(`${AUTH_URL}/api/auth/token`, { credentials: 'include', cache: 'no-store' });
-    const token = tokenRes.ok ? ((await tokenRes.json()) as { token?: string }).token ?? '' : '';
-    const user = {
+    const token = (await getToken()) ?? '';
+    const user: SessionUser = {
       id: String(body.user.id),
       email: String(body.user.email ?? ''),
       user_metadata: {
@@ -492,23 +559,28 @@ async function fetchSession() {
       role: String((body.user as { role?: string }).role ?? 'authenticated'),
       created_at: String(body.user.createdAt ?? new Date().toISOString()),
       image: body.user.image ?? null,
-      name: body.user.name ?? '',
+      name: String(body.user.name ?? ''),
     };
-    return {
+    const value: SessionValue = {
       access_token: token,
       refresh_token: '',
       expires_at: new Date(String(body.session.expiresAt ?? Date.now())).getTime() / 1000,
       user,
     };
+    sessionCache = { at: Date.now(), value };
+    return value;
   } catch {
+    sessionCache = { at: Date.now(), value: null };
     return null;
   }
 }
 
-type AuthListener = (event: string, session: Awaited<ReturnType<typeof fetchSession>>) => void;
+type AuthListener = (event: string, session: SessionValue | null) => void;
 const listeners = new Set<AuthListener>();
 
-function notify(event: string, session: Awaited<ReturnType<typeof fetchSession>>) {
+function notify(event: string, session: SessionValue | null) {
+  sessionCache = null;
+  if (event === 'SIGNED_OUT') tokenCache = null;
   for (const listener of listeners) listener(event, session);
 }
 
@@ -556,6 +628,7 @@ export const supabase = {
         const body = (await response.json().catch(() => null)) as { message?: string } | null;
         return { data: { user: null, session: null }, error: { message: body?.message ?? 'Invalid credentials' } };
       }
+      tokenCache = null;
       const session = await fetchSession();
       notify('SIGNED_IN', session);
       return { data: { user: session?.user ?? null, session }, error: null };
@@ -573,6 +646,7 @@ export const supabase = {
         const body = (await response.json().catch(() => null)) as { message?: string } | null;
         return { data: { user: null, session: null }, error: { message: body?.message ?? 'Could not sign up' } };
       }
+      tokenCache = null;
       const session = await fetchSession();
       notify('SIGNED_IN', session);
       return { data: { user: session?.user ?? null, session }, error: null };
@@ -603,6 +677,7 @@ export const supabase = {
         credentials: 'include',
         body: JSON.stringify({}),
       }).catch(() => undefined);
+      tokenCache = null;
       notify('SIGNED_OUT', null);
       return { error: null };
     },
