@@ -69,7 +69,7 @@ export default function SignupPage() {
         type: 'welcome',
         title: 'Welcome to the workspace!',
         body: 'Create a project or join one to get started.',
-        link: '/app/projects',
+        link: '/app/teams',
       });
       router.push('/app');
     } else {

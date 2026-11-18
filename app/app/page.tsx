@@ -172,7 +172,7 @@ export default function DashboardPage() {
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground tabular-nums">{myAssignedTasks.length} tasks</span>
               <Button variant="ghost" size="sm" asChild className="h-8 gap-1">
-                <Link href="/app/projects">
+                <Link href="/app/teams">
                   View all
                   <ArrowRight className="h-3.5 w-3.5" />
                 </Link>
@@ -216,7 +216,7 @@ export default function DashboardPage() {
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground tabular-nums">{recentTasks.length} tasks</span>
               <Button variant="ghost" size="sm" asChild className="h-8 gap-1">
-                <Link href="/app/projects">
+                <Link href="/app/teams">
                   View all
                   <ArrowRight className="h-3.5 w-3.5" />
                 </Link>
@@ -259,7 +259,7 @@ export default function DashboardPage() {
             Recent Projects
           </CardTitle>
           <Button variant="ghost" size="sm" asChild className="h-8 gap-1">
-            <Link href="/app/projects">
+            <Link href="/app/teams">
               View all
               <ArrowRight className="h-3.5 w-3.5" />
             </Link>
@@ -273,7 +273,7 @@ export default function DashboardPage() {
               description="Create your first project to get started"
               action={
                 <Button size="sm" asChild>
-                  <Link href="/app/projects">New Project</Link>
+                  <Link href="/app/teams">New Project</Link>
                 </Button>
               }
             />

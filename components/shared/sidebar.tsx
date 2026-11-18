@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard,
-  FolderKanban,
   Users,
   UsersRound,
   Bell,
@@ -25,7 +24,6 @@ import { APP_NAME, APP_LOGO_URL, APP_INITIAL } from '@/lib/app-config';
 const navItems = [
   { href: '/app', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/app/teams', label: 'Teams', icon: UsersRound },
-  { href: '/app/projects', label: 'Projects', icon: FolderKanban },
   { href: '/app/calendar', label: 'Calendar', icon: CalendarDays },
   { href: '/app/notifications', label: 'Notifications', icon: Bell },
   { href: '/app/users', label: 'Users', icon: Users, adminOnly: true },

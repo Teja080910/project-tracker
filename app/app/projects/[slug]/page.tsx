@@ -279,7 +279,7 @@ export default function ProjectDetailPage() {
       toast.error(error.message);
     } else {
       toast.success('Project deleted');
-      router.push('/app/projects');
+      router.push(project?.team?.slug ? `/app/teams/${project.team.slug}` : '/app/teams');
     }
   };
 
@@ -354,7 +354,7 @@ export default function ProjectDetailPage() {
       <div className="text-center py-12">
         <p className="text-sm text-muted-foreground">Project not found or you don&apos;t have access.</p>
         <Button variant="outline" className="mt-4" asChild>
-          <Link href="/app/projects">Back to Projects</Link>
+          <Link href="/app/teams">Back to Teams</Link>
         </Button>
       </div>
     );
@@ -365,7 +365,7 @@ export default function ProjectDetailPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3 animate-fade-in-up">
-        <BackButton fallbackHref="/app/projects" />
+        <BackButton fallbackHref={project.team?.slug ? `/app/teams/${project.team.slug}` : '/app/teams'} />
         <div className="flex-1">
           <div className="flex items-center gap-2">
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">

@@ -456,7 +456,6 @@ function MobileNav({ onNavigate }: { onNavigate: () => void }) {
   const items = [
     { href: '/app', label: 'Dashboard' },
     { href: '/app/teams', label: 'Teams' },
-    { href: '/app/projects', label: 'Projects' },
     { href: '/app/calendar', label: 'Calendar' },
     { href: '/app/notifications', label: 'Notifications' },
     ...(isAdmin ? [{ href: '/app/users', label: 'Users' }] : []),

@@ -338,7 +338,7 @@ function ProjectDocsContent() {
       <div className="text-center py-12">
         <p className="text-sm text-muted-foreground">Project not found.</p>
         <Button variant="outline" className="mt-4" asChild>
-          <a href="/app/projects">Back to Projects</a>
+          <a href="/app/teams">Back to Teams</a>
         </Button>
       </div>
     );
