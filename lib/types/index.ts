@@ -113,6 +113,9 @@ export interface Task {
   priority: TaskPriority;
   assignee_id: string | null;
   reporter_id: string;
+  approval_status: 'pending' | 'approved' | 'rejected';
+  approved_by: string | null;
+  approved_at: string | null;
   due_date: string | null;
   deleted_at: string | null;
   deleted_by: string | null;

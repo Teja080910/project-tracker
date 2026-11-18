@@ -32,6 +32,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
@@ -119,6 +120,8 @@ export default function TaskDetailPage() {
   const [editingCommentText, setEditingCommentText] = useState('');
   const [commentEditLoading, setCommentEditLoading] = useState(false);
   const [replyTo, setReplyTo] = useState<Comment | null>(null);
+  const [deleteCommentId, setDeleteCommentId] = useState<string | null>(null);
+  const [commentDeleteLoading, setCommentDeleteLoading] = useState(false);
   const [copiedCommentId, setCopiedCommentId] = useState<string | null>(null);
   const [collapsedThreads, setCollapsedThreads] = useState<Set<string>>(new Set());
   const [deleteTaskOpen, setDeleteTaskOpen] = useState(false);
@@ -594,6 +597,35 @@ export default function TaskDetailPage() {
     }
   };
 
+  const hasReplies = (comment: Comment) => comments.some((c) => c.parent_id === comment.id);
+
+  const requestDeleteComment = (comment: Comment) => {
+    if (hasReplies(comment)) {
+      toast.error('Delete the replies in this thread first');
+      return;
+    }
+    setDeleteCommentId(comment.id);
+  };
+
+  const deleteComment = async () => {
+    if (!deleteCommentId || !user) return;
+    setCommentDeleteLoading(true);
+    const { error } = await platform
+      .from('comments')
+      .delete()
+      .eq('id', deleteCommentId)
+      .eq('user_id', user.id);
+    setCommentDeleteLoading(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    setDeleteCommentId(null);
+    if (replyTo?.id === deleteCommentId) setReplyTo(null);
+    await fetchTask();
+    toast.success('Message deleted');
+  };
+
   const startReply = (comment: Comment) => {
     setReplyTo(comment);
     requestAnimationFrame(() => {
@@ -789,7 +821,7 @@ export default function TaskDetailPage() {
     setCommentEditLoading(true);
     const { error } = await platform
       .from('comments')
-      .update({ message: editingCommentText.trim(), edited_at: new Date().toISOString() })
+      .update({ message: editingCommentText.trim() })
       .eq('id', editingCommentId)
       .eq('user_id', user.id);
     setCommentEditLoading(false);
@@ -806,12 +838,55 @@ export default function TaskDetailPage() {
   const updateTask = async (updates: Partial<Task>) => {
     if (!task || !user) return;
     const projectSuffix = task.project?.name ? ` · ${task.project.name}` : '';
+    const notifBase = {
+      actor_id: user.id,
+      project_id: task.project_id,
+      link: `/app/tasks/${task.number}`,
+      priority: task.priority,
+    };
     const { error } = await platform.from('tasks').update(updates).eq('id', taskId);
     if (error) {
       toast.error(error.message);
       return;
     }
     try {
+      if (updates.approval_status && updates.approval_status !== task.approval_status) {
+        const approved = updates.approval_status === 'approved';
+        const action = approved ? 'approved task' : 'rejected task';
+        const { error: logErr } = await platform.from('activity_logs').insert({
+          project_id: task.project_id,
+          task_id: taskId,
+          user_id: user.id,
+          action,
+          entity_type: 'task',
+          entity_id: taskId,
+        });
+        if (logErr) throw logErr;
+
+        const reporterId = task.reporter_id;
+        if (reporterId && reporterId !== user.id) {
+          const title = `${approved ? 'Task approved' : 'Task rejected'}: #${task.number}${projectSuffix}`;
+          const { error: notifErr } = await platform.from('notifications').insert({
+            ...notifBase,
+            user_id: reporterId,
+            type: approved ? 'task_approved' : 'task_rejected',
+            title,
+            body: task.title,
+          });
+          if (notifErr) throw notifErr;
+          const reporter = members.find((m: any) => m.id === reporterId);
+          if (reporter) {
+            sendNotificationEmail(
+              reporter.email,
+              title,
+              task.title,
+              `${window.location.origin}/app/tasks/${task.number}`
+            );
+          }
+          sendPushToUser(reporterId, title, task.title, `/app/tasks/${task.number}`);
+        }
+      }
+
       if (updates.status && updates.status !== task.status) {
         const { error: logErr } = await platform.from('activity_logs').insert({
           project_id: task.project_id,
@@ -977,6 +1052,11 @@ export default function TaskDetailPage() {
   const isProjectAdmin = myRole === 'project_admin' || teamRole === 'team_admin' || teamRole === 'owner';
   const canEdit = isProjectAdmin || isGlobalAdmin(profile) || task?.reporter_id === user?.id;
   const canDelete = isProjectAdmin || isGlobalAdmin(profile);
+  const approvalStatus = task?.approval_status ?? 'approved';
+  const awaitingApproval = !!task?.assignee_id && approvalStatus !== 'approved';
+  const canApprove =
+    awaitingApproval &&
+    (user?.id === task?.assignee_id || isProjectAdmin || isGlobalAdmin(profile));
   const backHref = task?.version
     ? `/app/projects/${task?.project?.slug ?? task?.project_id}/versions/${task.version.slug}`
     : `/app/projects/${task?.project?.slug ?? task?.project_id}`;
@@ -1084,6 +1164,18 @@ export default function TaskDetailPage() {
         <div className="flex items-center gap-2 flex-1">
           <TypeBadge type={task.type} />
           <span className="text-sm text-muted-foreground">#{task.number}</span>
+          {awaitingApproval && (
+            <Badge
+              variant="outline"
+              className={
+                approvalStatus === 'rejected'
+                  ? 'border-red-500/20 bg-red-500/10 text-[10px] text-red-600 dark:text-red-400'
+                  : 'border-amber-500/20 bg-amber-500/10 text-[10px] text-amber-600 dark:text-amber-400'
+              }
+            >
+              {approvalStatus === 'rejected' ? 'Approval rejected' : 'Awaiting approval'}
+            </Badge>
+          )}
           {parentTask && (
             <Link
               href={`/app/tasks/${parentTask.number}`}
@@ -1435,6 +1527,15 @@ export default function TaskDetailPage() {
                                 <Pencil className="h-3 w-3" />
                               </button>
                             )}
+                            {isMine && !isEditingThis && (
+                              <button
+                                onClick={() => requestDeleteComment(comment)}
+                                className="text-muted-foreground/60 hover:text-destructive transition-colors"
+                                title="Delete message"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </button>
+                            )}
                           </div>
 
                           {/* Thread */}
@@ -1475,6 +1576,66 @@ export default function TaskDetailPage() {
                                                 </span>
                                               </p>
                                             )}
+                                            {editingCommentId === reply.id ? (
+                                              <div className="w-full space-y-2">
+                                                <div className="relative">
+                                                  <Textarea
+                                                    value={editingCommentText}
+                                                    onChange={(e) => handleMentionChange(e.target.value, 'edit', editCommentTextareaRef, editingCommentText, setEditingCommentText, setEditMentionQuery, setEditMentionIndex, setEditMentionOpen)}
+                                                    onKeyDown={(e) => handleMentionKeyDown(e, 'edit', editMentionOpen, editMentionCandidates, editMentionIndex, setEditMentionIndex, setEditMentionOpen, (m) => insertMention(m, 'edit', editCommentTextareaRef, editingCommentText, setEditingCommentText, setEditMentionOpen, setEditMentionQuery), saveCommentEdit)}
+                                                    rows={4}
+                                                    className="bg-background text-foreground text-sm resize min-h-[100px] max-w-full"
+                                                    autoFocus
+                                                  />
+                                                  {editMentionOpen && editMentionCandidates.length > 0 && (
+                                                    <div className="absolute bottom-full mb-2 w-72 rounded-xl border border-border bg-popover shadow-elevated z-20 overflow-hidden animate-fade-in-scale">
+                                                      <p className="px-3 py-1.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider border-b border-border/60">
+                                                        Mention someone
+                                                      </p>
+                                                      <div className="max-h-48 overflow-y-auto p-1">
+                                                        {editMentionCandidates.map((m, i) => (
+                                                          <button
+                                                            key={m.id}
+                                                            type="button"
+                                                            onMouseDown={(e) => { e.preventDefault(); insertMention(m, 'edit', editCommentTextareaRef, editingCommentText, setEditingCommentText, setEditMentionOpen, setEditMentionQuery); }}
+                                                            onMouseEnter={() => setEditMentionIndex(i)}
+                                                            className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm text-left transition-colors ${
+                                                              i === editMentionIndex ? 'bg-accent text-accent-foreground' : ''
+                                                            }`}
+                                                          >
+                                                            <UserAvatar profile={m} className="h-6 w-6 shrink-0" />
+                                                            <span className="flex flex-col min-w-0">
+                                                              <span className="truncate">{m.full_name ?? m.email}</span>
+                                                              {m.full_name && (
+                                                                <span className="text-[11px] text-muted-foreground truncate">{m.email}</span>
+                                                              )}
+                                                            </span>
+                                                          </button>
+                                                        ))}
+                                                      </div>
+                                                    </div>
+                                                  )}
+                                                </div>
+                                                <div className="flex gap-1.5 justify-end">
+                                                  <Button
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    className="h-7 px-2 text-xs"
+                                                    onClick={() => { setEditingCommentId(null); setEditingCommentText(''); }}
+                                                  >
+                                                    Cancel
+                                                  </Button>
+                                                  <Button
+                                                    size="sm"
+                                                    className="h-7 px-2 text-xs"
+                                                    onClick={saveCommentEdit}
+                                                    disabled={commentEditLoading || !editingCommentText.trim()}
+                                                  >
+                                                    {commentEditLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
+                                                  </Button>
+                                                </div>
+                                              </div>
+                                            ) : (
                                             <div
                                               className={cn(
                                                 'rounded-xl px-3 py-2 text-sm break-words whitespace-pre-wrap',
@@ -1521,6 +1682,7 @@ export default function TaskDetailPage() {
                                                 <span className="mt-1 block text-[10px] opacity-70">(edited)</span>
                                               )}
                                             </div>
+                                            )}
                                             <div className="mt-1 flex items-center gap-2 px-1 text-[11px] text-muted-foreground">
                                               <span className="font-medium">
                                                 {reply.profile?.full_name ?? reply.profile?.email}
@@ -1540,6 +1702,27 @@ export default function TaskDetailPage() {
                                               >
                                                 <Reply className="h-3 w-3" />
                                               </button>
+                                              {replyIsMine && editingCommentId !== reply.id && (
+                                                <button
+                                                  onClick={() => {
+                                                    setEditingCommentId(reply.id);
+                                                    setEditingCommentText(reply.message.trim() === ' ' ? '' : reply.message);
+                                                  }}
+                                                  className="text-muted-foreground/60 transition-colors hover:text-foreground"
+                                                  title="Edit message"
+                                                >
+                                                  <Pencil className="h-3 w-3" />
+                                                </button>
+                                              )}
+                                              {replyIsMine && editingCommentId !== reply.id && (
+                                                <button
+                                                  onClick={() => requestDeleteComment(reply)}
+                                                  className="text-muted-foreground/60 transition-colors hover:text-destructive"
+                                                  title="Delete message"
+                                                >
+                                                  <Trash2 className="h-3 w-3" />
+                                                </button>
+                                              )}
                                             </div>
                                           </div>
                                         </div>
@@ -1560,9 +1743,9 @@ export default function TaskDetailPage() {
               {/* New comment (bottom) */}
               <div className="flex gap-3 border-t border-border/60 p-4 shrink-0">
                 <UserAvatar profile={profile} className="h-8 w-8 shrink-0" />
-                <div className="flex-1 space-y-2">
+                <div className="min-w-0 flex-1 space-y-2">
                   {replyTo && (
-                    <div className="flex items-start justify-between gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2">
+                    <div className="flex min-w-0 items-start justify-between gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2">
                       <div className="flex min-w-0 items-start gap-2">
                         <CornerDownRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
                         <div className="min-w-0">
@@ -1711,7 +1894,7 @@ export default function TaskDetailPage() {
                 <ListChecks className="h-4 w-4" />
                 Subtasks ({subtasks.length})
               </CardTitle>
-              {!parentTask && !subtaskFormOpen && (
+              {!subtaskFormOpen && (
                 <Button size="sm" variant="outline" onClick={() => setSubtaskFormOpen(true)}>
                   <Plus className="h-4 w-4 mr-1.5" />
                   Add subtask
@@ -1719,7 +1902,7 @@ export default function TaskDetailPage() {
               )}
             </CardHeader>
             <CardContent className="space-y-3">
-              {subtaskFormOpen && !parentTask && (
+              {subtaskFormOpen && (
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                   <Input
                     autoFocus
@@ -1757,9 +1940,7 @@ export default function TaskDetailPage() {
               )}
               {subtasks.length === 0 ? (
                 <p className="py-2 text-center text-xs text-muted-foreground">
-                  {parentTask
-                    ? 'Subtasks cannot be nested further.'
-                    : 'No subtasks yet. Break this task into smaller pieces.'}
+                  No subtasks yet. Break this task into smaller pieces.
                 </p>
               ) : (
                 <div className="space-y-1.5">
@@ -1773,6 +1954,14 @@ export default function TaskDetailPage() {
                       <span className="font-mono text-[11px] text-muted-foreground">#{sub.number}</span>
                       <span className="min-w-0 flex-1 truncate text-sm">{sub.title}</span>
                       {sub.assignee && <UserAvatar profile={sub.assignee} className="h-5 w-5 shrink-0" />}
+                      {sub.approval_status === 'pending' && (
+                        <Badge
+                          variant="outline"
+                          className="border-amber-500/20 bg-amber-500/10 text-[10px] text-amber-600 dark:text-amber-400"
+                        >
+                          Approval pending
+                        </Badge>
+                      )}
                       <StatusBadge status={sub.status} />
                     </Link>
                   ))}
@@ -1795,7 +1984,7 @@ export default function TaskDetailPage() {
                 <Select
                   value={task.status}
                   onValueChange={(v) => updateTask({ status: v as Task['status'] })}
-                  disabled={!canEdit && myRole !== 'developer'}
+                  disabled={(!canEdit && myRole !== 'developer') || awaitingApproval}
                 >
                   <SelectTrigger className="h-9">
                     <SelectValue />
@@ -1806,6 +1995,67 @@ export default function TaskDetailPage() {
                     ))}
                   </SelectContent>
                 </Select>
+                {awaitingApproval && (
+                  <p className="text-[11px] text-muted-foreground">
+                    {approvalStatus === 'rejected'
+                      ? 'Rejected by the assignee — reassign the task to restart approval.'
+                      : `Waiting for ${task.assignee?.full_name ?? task.assignee?.email ?? 'the assignee'} to approve before work starts.`}
+                  </p>
+                )}
+              </div>
+
+              {/* Approval */}
+              <div className="space-y-1.5">
+                <label className="text-xs text-muted-foreground">Approval</label>
+                <div className="flex items-center justify-between gap-2 rounded-md border border-border/60 bg-secondary/30 px-2.5 py-2">
+                  <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                    <Badge
+                      variant="outline"
+                      className={
+                        approvalStatus === 'approved'
+                          ? 'border-green-500/20 bg-green-500/10 text-[10px] text-green-600 dark:text-green-400'
+                          : approvalStatus === 'rejected'
+                            ? 'border-red-500/20 bg-red-500/10 text-[10px] text-red-600 dark:text-red-400'
+                            : 'border-amber-500/20 bg-amber-500/10 text-[10px] text-amber-600 dark:text-amber-400'
+                      }
+                    >
+                      {approvalStatus === 'approved'
+                        ? 'Approved'
+                        : approvalStatus === 'rejected'
+                          ? 'Rejected'
+                          : 'Pending'}
+                    </Badge>
+                    {approvalStatus === 'approved' && task.approved_at && (
+                      <span className="text-[10px] text-muted-foreground">
+                        {formatRelativeTime(task.approved_at)}
+                      </span>
+                    )}
+                    {!task.assignee_id && (
+                      <span className="text-[10px] text-muted-foreground">No approval needed</span>
+                    )}
+                  </div>
+                  {canApprove && (
+                    <div className="flex shrink-0 gap-1">
+                      <Button
+                        size="sm"
+                        className="h-7 px-2 text-xs"
+                        onClick={() => updateTask({ approval_status: 'approved' })}
+                      >
+                        Approve
+                      </Button>
+                      {approvalStatus !== 'rejected' && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 px-2 text-xs"
+                          onClick={() => updateTask({ approval_status: 'rejected' })}
+                        >
+                          Reject
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Priority */}
@@ -2027,6 +2277,27 @@ export default function TaskDetailPage() {
           </Card>
         </div>
       </div>
+
+      {/* Delete message confirmation */}
+      <Dialog open={!!deleteCommentId} onOpenChange={(open) => { if (!open) setDeleteCommentId(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Delete message</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            This message will be removed for everyone. This cannot be undone.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteCommentId(null)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={deleteComment} disabled={commentDeleteLoading}>
+              {commentDeleteLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* File preview modal */}
       <Dialog open={!!previewFile} onOpenChange={(open) => { if (!open) setPreviewFile(null); setImageScale(1); }}>
