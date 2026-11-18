@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { supabase } from '@/lib/supabase/client';
+import { platform } from '@/lib/platform/client';
 import { useAuth } from '@/lib/auth-context';
 import { isGlobalAdmin, loadTeamAccess } from '@/lib/access';
 import { Button } from '@/components/ui/button';
@@ -40,7 +40,7 @@ export default function NewVersionPage() {
   useEffect(() => {
     if (!user || !profile) return;
     (async () => {
-      const { data: projectData } = await supabase
+      const { data: projectData } = await platform
         .from('projects')
         .select('id, team_id, owner_id')
         .eq('slug', projectSlug)
@@ -56,7 +56,7 @@ export default function NewVersionPage() {
         return;
       }
       const [membershipRes, teamAccess] = await Promise.all([
-        supabase
+        platform
           .from('project_members')
           .select('role')
           .eq('project_id', projectData.id)
@@ -78,7 +78,7 @@ export default function NewVersionPage() {
     e.preventDefault();
     if (!projectId) return;
     setLoading(true);
-    const { data, error } = await supabase
+    const { data, error } = await platform
       .from('versions')
       .insert({
         project_id: projectId,

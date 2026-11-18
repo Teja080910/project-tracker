@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase/client';
+import { platform } from '@/lib/platform/client';
 import type { Profile, TeamRole } from '@/lib/types';
 
 export function isGlobalAdmin(profile: Profile | null | undefined) {
@@ -13,8 +13,8 @@ export interface TeamAccess {
 
 export async function loadTeamAccess(userId: string): Promise<TeamAccess> {
   const [memberships, ownedTeams] = await Promise.all([
-    supabase.from('team_members').select('team_id, role').eq('user_id', userId),
-    supabase.from('teams').select('id').eq('owner_id', userId),
+    platform.from('team_members').select('team_id, role').eq('user_id', userId),
+    platform.from('teams').select('id').eq('owner_id', userId),
   ]);
 
   const roles = new Map<string, TeamRole | 'owner'>();

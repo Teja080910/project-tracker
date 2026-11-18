@@ -3,7 +3,7 @@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { supabase } from '@/lib/supabase/client';
+import { platform } from '@/lib/platform/client';
 import { ArrowLeft, CheckCircle2, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
@@ -20,7 +20,7 @@ export default function ForgotPasswordPage() {
     e.preventDefault();
     setLoading(true);
 
-    const { data: existing } = await supabase
+    const { data: existing } = await platform
       .from('profiles')
       .select('id')
       .eq('email', email)
@@ -32,7 +32,7 @@ export default function ForgotPasswordPage() {
       return;
     }
 
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    const { error } = await platform.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/reset-password`,
     });
     if (error) {

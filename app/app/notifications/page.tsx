@@ -20,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { supabase } from '@/lib/supabase/client';
+import { platform } from '@/lib/platform/client';
 import { useAuth } from '@/lib/auth-context';
 import { formatRelativeTime } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -49,8 +49,9 @@ function NotificationsContent() {
   const { user } = useAuth();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState(1);
   const PAGE_SIZE = 10;
+  const pageParam = Number(searchParams.get('page') ?? '1');
+  const page = Number.isInteger(pageParam) && pageParam > 0 ? pageParam : 1;
   const [deleteTarget, setDeleteTarget] = useState<Notification | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [priorityFilter, setPriorityFilter] = useState<string>(() => searchParams.get('priority') ?? 'all');
@@ -64,15 +65,29 @@ function NotificationsContent() {
         if (!value || value === 'all') sp.delete(key);
         else sp.set(key, value);
       }
+      sp.delete('page');
       const qs = sp.toString();
       router.replace(`${window.location.pathname}${qs ? `?${qs}` : ''}`, { scroll: false });
     },
     [searchParams, router]
   );
 
+  const setPageInUrl = useCallback(
+    (nextPage: number, replace = false) => {
+      const sp = new URLSearchParams(searchParams.toString());
+      if (nextPage <= 1) sp.delete('page');
+      else sp.set('page', String(nextPage));
+      const qs = sp.toString();
+      const url = `${window.location.pathname}${qs ? `?${qs}` : ''}`;
+      if (replace) router.replace(url, { scroll: false });
+      else router.push(url, { scroll: false });
+    },
+    [searchParams, router]
+  );
+
   const fetchNotifications = useCallback(async () => {
     if (!user) return;
-    const { data } = await supabase
+    const { data } = await platform
       .from('notifications')
       .select('*, actor:profiles!actor_id(*), project:projects(*)')
       .eq('user_id', user.id)
@@ -85,46 +100,63 @@ function NotificationsContent() {
     fetchNotifications();
   }, [fetchNotifications]);
 
-  // Realtime: new notifications appear instantly
+  // Realtime: notifications appear, update and disappear instantly
   useEffect(() => {
     if (!user) return;
-    const channel = supabase
+    const filter = `user_id=eq.${user.id}`;
+    const channel = platform
       .channel(`notifications:${user.id}`)
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` },
+        { event: 'INSERT', schema: 'public', table: 'notifications', filter },
         async (payload) => {
           const n = payload.new as unknown as unknown as Notification;
-          const { data: actor } = await supabase.from('profiles').select('*').eq('id', n.actor_id ?? '').maybeSingle();
-          const { data: project } = await supabase.from('projects').select('*').eq('id', n.project_id ?? '').maybeSingle();
+          const { data: actor } = await platform.from('profiles').select('*').eq('id', n.actor_id ?? '').maybeSingle();
+          const { data: project } = await platform.from('projects').select('*').eq('id', n.project_id ?? '').maybeSingle();
           setNotifications((prev) => {
             if (prev.some((x: any) => x.id === n.id)) return prev;
             return [{ ...n, actor: (actor as never) ?? null, project: (project as never) ?? null }, ...prev];
           });
         }
       )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'notifications', filter },
+        (payload) => {
+          const n = payload.new as unknown as Notification;
+          setNotifications((prev) => prev.map((item: any) => (item.id === n.id ? { ...item, ...n } : item)));
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'notifications', filter },
+        (payload) => {
+          const old = payload.old as { id?: string };
+          if (old?.id) setNotifications((prev) => prev.filter((item: any) => item.id !== old.id));
+        }
+      )
       .subscribe();
     return () => {
-      supabase.removeChannel(channel);
+      platform.removeChannel(channel);
     };
   }, [user]);
 
   const markAllRead = async () => {
     if (!user) return;
-    await supabase.from('notifications').update({ read: true }).eq('user_id', user.id).eq('read', false);
+    await platform.from('notifications').update({ read: true }).eq('user_id', user.id).eq('read', false);
     await fetchNotifications();
     toast.success('All marked as read');
   };
 
   const markRead = async (id: string) => {
     if (!user) return;
-    await supabase.from('notifications').update({ read: true }).eq('id', id).eq('user_id', user.id);
+    await platform.from('notifications').update({ read: true }).eq('id', id).eq('user_id', user.id);
     fetchNotifications();
   };
 
   const deleteNotification = async (id: string) => {
     if (!user) return;
-    await supabase.from('notifications').delete().eq('id', id).eq('user_id', user.id);
+    await platform.from('notifications').delete().eq('id', id).eq('user_id', user.id);
     fetchNotifications();
   };
 
@@ -138,8 +170,8 @@ function NotificationsContent() {
 
   const totalPages = Math.max(1, Math.ceil(notifications.length / PAGE_SIZE));
   useEffect(() => {
-    if (page > totalPages) setPage(1);
-  }, [page, totalPages]);
+    if (!loading && page > totalPages) setPageInUrl(1, true);
+  }, [loading, page, totalPages, setPageInUrl]);
 
   if (loading) {
     return (
@@ -205,7 +237,6 @@ function NotificationsContent() {
             value={search}
             onChange={(e) => {
               setSearch(e.target.value);
-              setPage(1);
               updateParams({ q: e.target.value });
             }}
             className="pl-9 h-9"
@@ -215,7 +246,6 @@ function NotificationsContent() {
           value={priorityFilter}
           onValueChange={(v) => {
             setPriorityFilter(v);
-            setPage(1);
             updateParams({ priority: v });
           }}
         >
@@ -234,7 +264,6 @@ function NotificationsContent() {
           value={typeFilter}
           onValueChange={(v) => {
             setTypeFilter(v);
-            setPage(1);
             updateParams({ type: v });
           }}
         >
@@ -347,7 +376,7 @@ function NotificationsContent() {
         page={page}
         pageSize={PAGE_SIZE}
         total={filtered.length}
-        onPageChange={setPage}
+        onPageChange={setPageInUrl}
       />
 
       {/* Delete notification confirmation */}

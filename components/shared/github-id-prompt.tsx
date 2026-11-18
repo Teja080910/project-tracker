@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/lib/auth-context';
-import { supabase } from '@/lib/supabase/client';
+import { platform } from '@/lib/platform/client';
 import {
   Dialog,
   DialogContent,
@@ -43,7 +43,7 @@ export function GithubIdPrompt() {
     }
     if (!profile) return;
     setSaving(true);
-    const { error } = await supabase.from('profiles').update({ github_id: v }).eq('id', profile.id);
+    const { error } = await platform.from('profiles').update({ github_id: v }).eq('id', profile.id);
     setSaving(false);
     if (error) {
       toast.error(error.message);

@@ -10,7 +10,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { UserAvatar } from '@/components/shared/user-avatar';
 import { EmptyState } from '@/components/shared/empty-state';
 import { StatusBadge, TypeBadge, PriorityBadge } from '@/components/shared/badges';
-import { supabase } from '@/lib/supabase/client';
+import { platform } from '@/lib/platform/client';
 import { useAuth } from '@/lib/auth-context';
 import { formatDate } from '@/lib/utils';
 import type { Task } from '@/lib/types';
@@ -25,7 +25,7 @@ export default function CalendarPage() {
   const fetchTasks = useCallback(async () => {
     if (!user || !profile) return;
 
-    const { data: visibleProjects } = await supabase.from('projects').select('id');
+    const { data: visibleProjects } = await platform.from('projects').select('id');
     const projectIds = (visibleProjects ?? []).map((p: any) => (p as { id: string }).id);
 
     if (projectIds.length === 0) {
@@ -34,7 +34,7 @@ export default function CalendarPage() {
       return;
     }
 
-    const { data } = await supabase
+    const { data } = await platform
       .from('tasks')
       .select('*, project:projects(*), version:versions(*), assignee:profiles!assignee_id(*), reporter:profiles!reporter_id(*)')
       .in('project_id', projectIds)

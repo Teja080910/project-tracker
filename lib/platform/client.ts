@@ -1,10 +1,11 @@
 'use client';
 
 /**
- * Supabase-compatible facade over the platform API.
+ * Platform API client.
  *
- * Keeps the fluent `.from().select().eq()...` chains and `.channel()` realtime
- * usage the app already has, but every call is authorized by the NestJS API.
+ * Keeps the fluent `.from().select().eq()...` chains and `.channel()`
+ * realtime usage as a convenience shape, but every call goes to the NestJS
+ * platform API and its WebSocket gateway.
  */
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://127.0.0.1:4105';
@@ -22,7 +23,7 @@ const BUCKET_PATHS: Record<string, string> = {
 };
 
 export type QueryError = { message: string; code?: string; details?: string; hint?: string };
-/* eslint-disable @typescript-eslint/no-explicit-any -- Supabase-style builder erases row types */
+/* eslint-disable @typescript-eslint/no-explicit-any -- fluent builder erases row types */
 export type QueryResult<T = any> = {
   data: any;
   error: QueryError | null;
@@ -309,7 +310,8 @@ class QueryBuilder<T = any> implements PromiseLike<QueryResult<T>> {
         const cacheKey = `${this.table}${withQuery}`;
         const now = Date.now();
         const cached = readCache.get(cacheKey);
-        if (cached && now - cached.at < READ_CACHE_MS) {
+        const isCount = this.countMode && this.headMode;
+        if (!isCount && cached && now - cached.at < READ_CACHE_MS) {
           const body = JSON.parse(cached.text) as unknown;
           if (this.countMode && this.headMode) {
             return { data: null, error: null, count: Number(body) };
@@ -421,6 +423,9 @@ class Channel {
       return this.name.startsWith('comments:') ? this.name : null;
     }
     if (subscription.table === 'notifications') {
+      const filter = subscription.filter ?? '';
+      const match = filter.match(/^user_id=eq\.(.+)$/);
+      if (match?.[1]) return `notifications:${match[1]}`;
       return this.name.startsWith('notifications:') ? this.name : null;
     }
     return null;
@@ -487,6 +492,12 @@ class Channel {
       }
       if (message.type === 'notification.created' && subscription.event === 'INSERT') {
         subscription.handler({ new: message.notification as Row, old: {}, eventType: 'INSERT' });
+      }
+      if (message.type === 'notification.updated' && subscription.event === 'UPDATE') {
+        subscription.handler({ new: message.notification as Row, old: {}, eventType: 'UPDATE' });
+      }
+      if (message.type === 'notification.deleted' && subscription.event === 'DELETE') {
+        subscription.handler({ new: {}, old: message.notification as Row, eventType: 'DELETE' });
       }
     }
   }
@@ -584,7 +595,7 @@ function notify(event: string, session: SessionValue | null) {
   for (const listener of listeners) listener(event, session);
 }
 
-export const supabase = {
+export const platform = {
   from<T = Row>(table: string): QueryBuilder<T> {
     return new QueryBuilder<T>(table);
   },
@@ -800,6 +811,6 @@ export const supabase = {
   },
 };
 
-export type SupabaseClient = typeof supabase;
+export type PlatformClient = typeof platform;
 export type User = NonNullable<Awaited<ReturnType<typeof fetchSession>>>['user'];
 export type Session = NonNullable<Awaited<ReturnType<typeof fetchSession>>>;

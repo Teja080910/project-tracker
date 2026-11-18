@@ -36,7 +36,7 @@ import { BackButton } from '@/components/shared/back-button';
 import { EmptyState } from '@/components/shared/empty-state';
 import { RichTextEditor } from '@/components/shared/rich-text-editor';
 import { ConfirmDeleteDialog } from '@/components/shared/confirm-delete-dialog';
-import { supabase } from '@/lib/supabase/client';
+import { platform } from '@/lib/platform/client';
 import { useAuth } from '@/lib/auth-context';
 import { formatRelativeTime, cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -205,7 +205,7 @@ function ProjectDocsContent() {
 
   const fetchData = useCallback(async () => {
     if (!user) return;
-    const { data: projectData } = await supabase
+    const { data: projectData } = await platform
       .from('projects')
       .select('*')
       .eq('slug', projectSlug)
@@ -215,7 +215,7 @@ function ProjectDocsContent() {
       setLoading(false);
       return;
     }
-    const { data: docsData } = await supabase
+    const { data: docsData } = await platform
       .from('project_docs')
       .select('*')
       .eq('project_id', projectData.id)
@@ -254,7 +254,7 @@ function ProjectDocsContent() {
     if (!project || !user) return;
     const title = newTitle.trim() || 'Untitled';
     setCreating(true);
-    const { data, error } = await supabase
+    const { data, error } = await platform
       .from('project_docs')
       .insert({
         project_id: project.id,
@@ -292,7 +292,7 @@ function ProjectDocsContent() {
     if (!selectedDoc || !user) return;
     const title = editTitle.trim() || 'Untitled';
     setSaving(true);
-    const { error } = await supabase
+    const { error } = await platform
       .from('project_docs')
       .update({ title, content: editContent, updated_by: user.id })
       .eq('id', selectedDoc.id);
@@ -309,7 +309,7 @@ function ProjectDocsContent() {
   const deleteDoc = async () => {
     if (!deleteTarget) return;
     setDeleting(true);
-    const { error } = await supabase.from('project_docs').delete().eq('id', deleteTarget.id);
+    const { error } = await platform.from('project_docs').delete().eq('id', deleteTarget.id);
     setDeleting(false);
     setDeleteTarget(null);
     if (error) {

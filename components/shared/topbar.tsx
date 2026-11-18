@@ -24,7 +24,7 @@ import { ThemeToggle } from '@/components/shared/theme-toggle';
 import { UserAvatar } from '@/components/shared/user-avatar';
 import { PriorityBadge } from '@/components/shared/badges';
 import { useAuth } from '@/lib/auth-context';
-import { supabase } from '@/lib/supabase/client';
+import { platform } from '@/lib/platform/client';
 import { formatRelativeTime, cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import Link from 'next/link';
@@ -45,49 +45,91 @@ export function Topbar() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const unreadRefreshRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const fetchUnreadCount = useCallback(async () => {
+    if (!profile) return;
+    const { count } = await platform
+      .from('notifications')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', profile.id)
+      .eq('read', false);
+    if (typeof count === 'number') setUnreadCount(count);
+  }, [profile]);
+
+  const scheduleUnreadRefresh = useCallback(() => {
+    if (unreadRefreshRef.current) clearTimeout(unreadRefreshRef.current);
+    unreadRefreshRef.current = setTimeout(() => {
+      unreadRefreshRef.current = null;
+      void fetchUnreadCount();
+    }, 150);
+  }, [fetchUnreadCount]);
 
   const fetchNotifications = useCallback(async () => {
     if (!profile) return;
-    const { data } = await supabase
+    const { data } = await platform
       .from('notifications')
       .select('*, actor:profiles!actor_id(*), project:projects(*)')
       .eq('user_id', profile.id)
       .order('created_at', { ascending: false })
       .limit(10);
-    if (data) {
-      setNotifications(data as unknown as Notification[]);
-      setUnreadCount(data.filter((n: any) => !n.read).length);
-    }
-  }, [profile]);
+    if (data) setNotifications(data as unknown as Notification[]);
+    await fetchUnreadCount();
+  }, [profile, fetchUnreadCount]);
 
   useEffect(() => {
     fetchNotifications();
   }, [fetchNotifications]);
 
-  // Realtime: new notifications appear instantly
+  useEffect(() => {
+    return () => {
+      if (unreadRefreshRef.current) clearTimeout(unreadRefreshRef.current);
+    };
+  }, []);
+
+  // Realtime: keep the list and unread badge in sync without a refresh
   useEffect(() => {
     if (!profile) return;
-    const channel = supabase
+    const filter = `user_id=eq.${profile.id}`;
+    const channel = platform
       .channel(`topbar-notifications:${profile.id}`)
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${profile.id}` },
+        { event: 'INSERT', schema: 'public', table: 'notifications', filter },
         async (payload) => {
           const n = payload.new as unknown as Notification;
-          const { data: actor } = await supabase.from('profiles').select('*').eq('id', n.actor_id ?? '').maybeSingle();
-          const { data: project } = await supabase.from('projects').select('*').eq('id', n.project_id ?? '').maybeSingle();
+          const { data: actor } = await platform.from('profiles').select('*').eq('id', n.actor_id ?? '').maybeSingle();
+          const { data: project } = await platform.from('projects').select('*').eq('id', n.project_id ?? '').maybeSingle();
           setNotifications((prev) => {
             if (prev.some((x) => x.id === n.id)) return prev;
             return [{ ...n, actor: (actor as never) ?? null, project: (project as never) ?? null }, ...prev].slice(0, 10);
           });
-          setUnreadCount((c) => c + 1);
+          scheduleUnreadRefresh();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'notifications', filter },
+        (payload) => {
+          const n = payload.new as unknown as Notification;
+          setNotifications((prev) => prev.map((item) => (item.id === n.id ? { ...item, ...n } : item)));
+          scheduleUnreadRefresh();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'notifications', filter },
+        (payload) => {
+          const old = payload.old as { id?: string };
+          if (old?.id) setNotifications((prev) => prev.filter((item) => item.id !== old.id));
+          scheduleUnreadRefresh();
         }
       )
       .subscribe();
     return () => {
-      supabase.removeChannel(channel);
+      platform.removeChannel(channel);
     };
-  }, [profile]);
+  }, [profile, scheduleUnreadRefresh]);
 
   useEffect(() => {
     if (!searchQuery.trim() || searchQuery.length < 2) {
@@ -96,18 +138,18 @@ export function Topbar() {
     }
     const timer = setTimeout(async () => {
       const [projectsRes, tasksRes, usersRes] = await Promise.all([
-        supabase
+        platform
           .from('projects')
           .select('id, name, slug')
           .ilike('name', `%${searchQuery}%`)
           .limit(5),
-        supabase
+        platform
           .from('tasks')
           .select('id, number, title')
           .or(`title.ilike.%${searchQuery}%,description.ilike.%${searchQuery}%`)
           .is('deleted_at', null)
           .limit(5),
-        supabase
+        platform
           .from('profiles')
           .select('id, full_name, email')
           .or(`full_name.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%`)
@@ -124,8 +166,32 @@ export function Topbar() {
 
   const markAllRead = async () => {
     if (!profile) return;
-    await supabase.from('notifications').update({ read: true }).eq('user_id', profile.id).eq('read', false);
-    fetchNotifications();
+    const { error } = await platform
+      .from('notifications')
+      .update({ read: true })
+      .eq('user_id', profile.id)
+      .eq('read', false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    setUnreadCount(0);
+  };
+
+  const markRead = async (id: string) => {
+    if (!profile) return;
+    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
+    setUnreadCount((c) => Math.max(0, c - 1));
+    const { error } = await platform
+      .from('notifications')
+      .update({ read: true })
+      .eq('id', id)
+      .eq('user_id', profile.id);
+    if (error) {
+      toast.error(error.message);
+      void fetchNotifications();
+    }
   };
 
   const handleSignOut = async () => {
@@ -268,6 +334,9 @@ export function Topbar() {
                 <Link
                   key={n.id}
                   href={n.link ?? '#'}
+                  onClick={(e) => {
+                    if (!n.read && !e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) void markRead(n.id);
+                  }}
                   className="block px-2 py-2 rounded-lg hover:bg-accent transition-colors duration-150"
                 >
                   <div className="flex items-start gap-2.5">
@@ -342,30 +411,45 @@ function MobileNav({ onNavigate }: { onNavigate: () => void }) {
 
   useEffect(() => {
     if (!profile) return;
+    let refreshTimer: ReturnType<typeof setTimeout> | null = null;
     const fetchCount = async () => {
-      const { count } = await supabase
+      const { count } = await platform
         .from('notifications')
         .select('id', { count: 'exact', head: true })
         .eq('user_id', profile.id)
         .eq('read', false);
       setUnreadCount(count ?? 0);
     };
+    const scheduleRefresh = () => {
+      if (refreshTimer) clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(() => {
+        refreshTimer = null;
+        void fetchCount();
+      }, 150);
+    };
     fetchCount();
-    const channel = supabase
+    const filter = `user_id=eq.${profile.id}`;
+    const channel = platform
       .channel(`mobilenav-notifications:${profile.id}`)
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${profile.id}` },
-        () => setUnreadCount((c) => c + 1)
+        { event: 'INSERT', schema: 'public', table: 'notifications', filter },
+        scheduleRefresh
       )
       .on(
         'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'notifications', filter: `user_id=eq.${profile.id}` },
-        () => fetchCount()
+        { event: 'UPDATE', schema: 'public', table: 'notifications', filter },
+        scheduleRefresh
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'notifications', filter },
+        scheduleRefresh
       )
       .subscribe();
     return () => {
-      supabase.removeChannel(channel);
+      if (refreshTimer) clearTimeout(refreshTimer);
+      platform.removeChannel(channel);
     };
   }, [profile]);
 

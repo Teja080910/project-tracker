@@ -27,7 +27,7 @@ import {
 } from '@/components/ui/dialog';
 import { EmptyState } from '@/components/shared/empty-state';
 import { PaginationControls } from '@/components/shared/pagination';
-import { supabase } from '@/lib/supabase/client';
+import { platform } from '@/lib/platform/client';
 import { useAuth } from '@/lib/auth-context';
 import { isGlobalAdmin, loadTeamAccess } from '@/lib/access';
 import { getProjectStatusMeta } from '@/lib/constants';
@@ -69,8 +69,8 @@ export default function ProjectsPage() {
   const fetchProjects = useCallback(async () => {
     if (!user || !profile) return;
     const [{ data }, teamsRes] = await Promise.all([
-      supabase.from('projects').select('*, team:teams(*)').order('created_at', { ascending: false }),
-      supabase.from('teams').select('*').order('name', { ascending: true }),
+      platform.from('projects').select('*, team:teams(*)').order('created_at', { ascending: false }),
+      platform.from('teams').select('*').order('name', { ascending: true }),
     ]);
     setProjects((data as unknown as Project[]) ?? []);
     setTeams((teamsRes.data as Team[]) ?? []);
@@ -107,7 +107,7 @@ export default function ProjectsPage() {
       return;
     }
     setCreating(true);
-    const { data, error } = await supabase
+    const { data, error } = await platform
       .from('projects')
       .insert({
         name: name.trim(),
@@ -127,13 +127,13 @@ export default function ProjectsPage() {
 
     try {
       if (globalAdmin) {
-        await supabase.from('project_members').insert({
+        await platform.from('project_members').insert({
           project_id: data.id,
           user_id: user.id,
           role: 'project_admin',
         });
       }
-      await supabase.from('activity_logs').insert({
+      await platform.from('activity_logs').insert({
         project_id: data.id,
         user_id: user.id,
         action: 'created project',

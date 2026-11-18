@@ -21,7 +21,7 @@ import { Button } from '@/components/ui/button';
 import { StatusBadge, TypeBadge } from '@/components/shared/badges';
 import { UserAvatar } from '@/components/shared/user-avatar';
 import { EmptyState } from '@/components/shared/empty-state';
-import { supabase } from '@/lib/supabase/client';
+import { platform } from '@/lib/platform/client';
 import { useAuth } from '@/lib/auth-context';
 import { formatRelativeTime } from '@/lib/utils';
 import type { Task, Project } from '@/lib/types';
@@ -47,7 +47,7 @@ export default function DashboardPage() {
   const fetchDashboard = useCallback(async () => {
     if (!user || !profile) return;
 
-    const { data: projectRows } = await supabase
+    const { data: projectRows } = await platform
       .from('projects')
       .select('*, team:teams(*)')
       .order('created_at', { ascending: false });
@@ -58,24 +58,24 @@ export default function DashboardPage() {
     const fallbackId = '00000000-0000-0000-0000-000000000000';
 
     const [myTasksRes, recentTasksRes, openRes, inProgressRes, completedRes, cancelledRes] = await Promise.all([
-      supabase
+      platform
         .from('tasks')
         .select('*, project:projects(*), assignee:profiles!assignee_id(*), reporter:profiles!reporter_id(*)')
         .eq('assignee_id', user.id)
         .is('deleted_at', null)
         .order('updated_at', { ascending: false })
         .limit(5),
-      supabase
+      platform
         .from('tasks')
         .select('*, project:projects(*), assignee:profiles!assignee_id(*), reporter:profiles!reporter_id(*)')
         .in('project_id', projectIds.length > 0 ? projectIds : [fallbackId])
         .is('deleted_at', null)
         .order('updated_at', { ascending: false })
         .limit(5),
-      supabase.from('tasks').select('id', { count: 'exact', head: true }).in('project_id', projectIds.length > 0 ? projectIds : [fallbackId]).eq('status', 'open').is('deleted_at', null),
-      supabase.from('tasks').select('id', { count: 'exact', head: true }).in('project_id', projectIds.length > 0 ? projectIds : [fallbackId]).eq('status', 'in_progress').is('deleted_at', null),
-      supabase.from('tasks').select('id', { count: 'exact', head: true }).in('project_id', projectIds.length > 0 ? projectIds : [fallbackId]).eq('status', 'completed').is('deleted_at', null),
-      supabase.from('tasks').select('id', { count: 'exact', head: true }).in('project_id', projectIds.length > 0 ? projectIds : [fallbackId]).eq('status', 'cancelled').is('deleted_at', null),
+      platform.from('tasks').select('id', { count: 'exact', head: true }).in('project_id', projectIds.length > 0 ? projectIds : [fallbackId]).eq('status', 'open').is('deleted_at', null),
+      platform.from('tasks').select('id', { count: 'exact', head: true }).in('project_id', projectIds.length > 0 ? projectIds : [fallbackId]).eq('status', 'in_progress').is('deleted_at', null),
+      platform.from('tasks').select('id', { count: 'exact', head: true }).in('project_id', projectIds.length > 0 ? projectIds : [fallbackId]).eq('status', 'completed').is('deleted_at', null),
+      platform.from('tasks').select('id', { count: 'exact', head: true }).in('project_id', projectIds.length > 0 ? projectIds : [fallbackId]).eq('status', 'cancelled').is('deleted_at', null),
     ]);
 
     const myTasksData = (myTasksRes.data ?? []) as unknown as Task[];

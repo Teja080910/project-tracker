@@ -45,7 +45,7 @@ import { EmptyState } from '@/components/shared/empty-state';
 import { PaginationControls } from '@/components/shared/pagination';
 import { DatePicker } from '@/components/shared/date-picker';
 import { StatusBadge, TypeBadge, PriorityBadge } from '@/components/shared/badges';
-import { supabase } from '@/lib/supabase/client';
+import { platform } from '@/lib/platform/client';
 import { useAuth } from '@/lib/auth-context';
 import { sendPushToUser } from '@/lib/push';
 import { sendNotificationEmail } from '@/lib/email-client';
@@ -123,7 +123,7 @@ function VersionDetailContent() {
   const fetchData = useCallback(async () => {
     if (!user) return;
 
-    const { data: projectData } = await supabase
+    const { data: projectData } = await platform
       .from('projects')
       .select('*')
       .eq('slug', projectSlug)
@@ -134,7 +134,7 @@ function VersionDetailContent() {
       return;
     }
 
-    const { data: versionData } = await supabase
+    const { data: versionData } = await platform
       .from('versions')
       .select('*')
       .eq('project_id', projectData.id)
@@ -146,7 +146,7 @@ function VersionDetailContent() {
       return;
     }
 
-    const { data: tasksData } = await supabase
+    const { data: tasksData } = await platform
       .from('tasks')
       .select('*, project:projects(*), version:versions(*), assignee:profiles!assignee_id(*), reporter:profiles!reporter_id(*)')
       .eq('version_id', versionData.id)
@@ -155,13 +155,13 @@ function VersionDetailContent() {
     setTasks((tasksData as unknown as Task[]) ?? []);
 
     // Fetch project members for the assignee picker (includes owner)
-    const { data: membersData } = await supabase
+    const { data: membersData } = await platform
       .from('project_members')
       .select('profile:profiles(*)')
       .eq('project_id', projectData.id);
     const memberProfiles = (membersData?.map((m: any) => m.profile) as unknown as Profile[]) ?? [];
     if (projectData.team_id) {
-      const { data: teamMembersData } = await supabase
+      const { data: teamMembersData } = await platform
         .from('team_members')
         .select('profile:profiles(*)')
         .eq('team_id', projectData.team_id);
@@ -171,7 +171,7 @@ function VersionDetailContent() {
         }
       }
     }
-    const { data: ownerData } = await supabase.from('profiles').select('*').eq('id', projectData.owner_id).maybeSingle();
+    const { data: ownerData } = await platform.from('profiles').select('*').eq('id', projectData.owner_id).maybeSingle();
     if (ownerData && !memberProfiles.some((p: any) => p.id === ownerData.id)) {
       memberProfiles.push(ownerData as Profile);
     }
@@ -216,7 +216,7 @@ function VersionDetailContent() {
   );
 
   const restoreTask = async (id: string) => {
-    const { error } = await supabase
+    const { error } = await platform
       .from('tasks')
       .update({ deleted_at: null, deleted_by: null })
       .eq('id', id);
@@ -234,7 +234,7 @@ function VersionDetailContent() {
       return;
     }
     setSaving(true);
-    const { error } = await supabase
+    const { error } = await platform
       .from('versions')
       .update({
         name: editName.trim(),
@@ -383,7 +383,7 @@ function VersionDetailContent() {
     setTaskCreating(true);
 
     // number is assigned by the tasks_number_seq sequence
-    const { data, error } = await supabase
+    const { data, error } = await platform
       .from('tasks')
       .insert({
         title: taskTitle.trim(),
@@ -414,7 +414,7 @@ function VersionDetailContent() {
           const ext = file.name.split('.').pop() ?? 'png';
           const fileType = file.type || (isMarkdownAttachment('', file.name) ? 'text/markdown' : null);
           const storageName = `${project.id}/${data.id}/comments/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-          const { error: uploadError } = await supabase.storage
+          const { error: uploadError } = await platform.storage
             .from('task-screenshots')
             .upload(storageName, file, {
               contentType: fileType ?? undefined,
@@ -425,7 +425,7 @@ function VersionDetailContent() {
         }
 
         const singleAttachment = uploaded.length === 1 ? uploaded[0] : null;
-        const { error: commentErr } = await supabase.from('comments').insert({
+        const { error: commentErr } = await platform.from('comments').insert({
           task_id: data.id,
           user_id: user.id,
           message: uploaded.length === 0 ? commentText : commentText || 'Attachment',
@@ -446,7 +446,7 @@ function VersionDetailContent() {
         );
         for (const m of mentioned) {
           const title = `${profile?.full_name ?? profile?.email} mentioned you in #${data.number}${projectSuffix}`;
-          await supabase.from('notifications').insert({
+          await platform.from('notifications').insert({
             user_id: m.id,
             actor_id: user.id,
             project_id: project.id,
@@ -466,7 +466,7 @@ function VersionDetailContent() {
         }
       }
 
-      await supabase.from('activity_logs').insert({
+      await platform.from('activity_logs').insert({
         project_id: project.id,
         task_id: data.id,
         user_id: user.id,
@@ -476,7 +476,7 @@ function VersionDetailContent() {
       });
 
       if (taskAssigneeId !== 'none' && taskAssigneeId !== user.id) {
-        await supabase.from('notifications').insert({
+        await platform.from('notifications').insert({
           user_id: taskAssigneeId,
           actor_id: user.id,
           project_id: project.id,

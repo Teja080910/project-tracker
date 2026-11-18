@@ -1,124 +1,55 @@
 # Trackflow
 
-A project management application built with Next.js, TypeScript, and Supabase.
+A project management application built with Next.js, TypeScript, and the platform API.
 
 ## Tech Stack
 
 - **Framework:** Next.js 13 (App Router)
 - **Language:** TypeScript
 - **Styling:** Tailwind CSS, shadcn/ui
-- **Database:** Supabase (PostgreSQL)
-- **Auth:** Supabase Auth
-- **Storage:** Supabase Storage
+- **Database:** PostgreSQL via platform API
+- **Auth:** Platform auth
+- **Storage:** Object storage via platform API
+- **Realtime:** Platform WebSocket gateway
 
 ## Getting Started
 
 ### Prerequisites
 
 - Node.js 18+
-- Supabase CLI (for running migrations locally)
+- Platform API, auth and file services running
 
-### 1. One-Command Setup (recommended)
+### 1. Install dependencies
 
 ```bash
-npm run setup
+npm install
 ```
-
-This installs dependencies, resets the database with migrations, seeds demo data, and starts the dev server.
 
 ### 2. Environment Variables
 
-Copy `.env.sample` to `.env` and fill in the values:
+Copy `.env.sample` to `.env.local` and fill in the values:
 
 ```
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-SMTP_USER=your-gmail@gmail.com
-SMTP_PASS=your-gmail-app-password
+NEXT_PUBLIC_API_URL=http://127.0.0.1:4105
+NEXT_PUBLIC_AUTH_URL=http://127.0.0.1:4100
+NEXT_PUBLIC_WS_URL=ws://127.0.0.1:4105/ws
+NEXT_PUBLIC_FILES_URL=http://127.0.0.1:19000/pt-task-screenshots
 ```
 
-Get Supabase keys from Supabase Dashboard > Project Settings > API.
-SMTP uses Gmail (App Password required — Google > Security > 2-Step Verification > App passwords).
+Optional: SMTP settings for email notifications and VAPID keys for browser push.
 
-### 3. Database Commands
-
-| Command | Description |
-|---|---|
-| `npm run db:start` | Start local Supabase |
-| `npm run db:stop` | Stop local Supabase |
-| `npm run db:reset` | Drop & recreate database (applies migrations) |
-| `npm run db:migrate` | Push migrations to remote |
-| `npm run db:seed` | Seed demo users, 5 projects, versions & tasks |
-| `npm run db:setup` | Reset + seed in one step |
-
-### 4. Demo Users (seeded)
-
-All passwords: `Test@123456`
-
-| Email | Role |
-|---|---|
-| `ast.super-admin@yopmail.com` | super_admin |
-| `ast.project-admin@yopmail.com` | project_admin |
-| `ast.developer@yopmail.com` | developer |
-| `ast.tester@yopmail.com` | tester |
-| `ast.viewer@yopmail.com` | viewer |
-
-Seed data: 5 projects, each with 20-50 versions, each version with 40-100 tasks.
-
-### 3. Run Database Migrations
-
-**Option A — Supabase CLI (local development):**
-
-```bash
-supabase start
-supabase migration up
-```
-
-**Option B — Supabase Dashboard (production):**
-
-1. Go to Supabase Dashboard > SQL Editor
-2. Open and run `supabase/migrations/20260812000000_create_project_management_schema.sql`
-
-**Option C — Supabase CLI (remote project):**
-
-```bash
-supabase link --project-ref your-project-ref
-supabase db push
-```
-
-### 4. Create a Storage Bucket
-
-In Supabase Dashboard > Storage, create a public bucket named `task-screenshots` (the migration creates it automatically on local reset).
-
-### 5. Run the dev server
+### 3. Run the dev server
 
 ```bash
 npm run dev
 ```
 
-## Creating an Admin User
+The app runs at `http://localhost:3005`.
 
-New users default to the `viewer` role. To create a `super_admin`:
+## User Roles
 
-### Via the script
-
-```bash
-npm run make-admin -- admin@example.com
-```
-
-Requires `SUPABASE_SERVICE_ROLE_KEY` in `.env`.
-
-### Via Supabase SQL Editor
-
-```sql
-UPDATE public.profiles SET role = 'super_admin' WHERE email = 'admin@example.com';
-```
-
-### Via Supabase Dashboard
-
-1. Authentication > Users > Add User
-2. Table Editor > `profiles` > change role to `super_admin`
+Roles are managed by the platform backend. Super admins can manage users from the
+Users page in the app.
 
 ## Features
 
@@ -142,9 +73,9 @@ UPDATE public.profiles SET role = 'super_admin' WHERE email = 'admin@example.com
 |---|---|
 | `npm run dev` | Start dev server |
 | `npm run build` | Production build |
+| `npm run start` | Start production server |
 | `npm run lint` | Run ESLint |
 | `npm run typecheck` | Run TypeScript checks |
-| `npm run make-admin -- <email>` | Promote a user to super_admin |
 
 ## Project Structure
 
@@ -156,7 +87,5 @@ UPDATE public.profiles SET role = 'super_admin' WHERE email = 'admin@example.com
 ├── components/       # React components
 │   ├── shared/       # Shared components (sidebar, topbar, badges, etc.)
 │   └── ui/           # shadcn/ui primitives
-├── lib/              # Utilities, types, constants, Supabase clients
-├── scripts/          # CLI scripts
-└── supabase/         # Database migrations
+└── lib/              # Utilities, types, constants, platform API clients
 ```

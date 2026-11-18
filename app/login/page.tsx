@@ -2,7 +2,7 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { supabase } from '@/lib/supabase/client';
+import { platform } from '@/lib/platform/client';
 import { APP_NAME, APP_LOGO_URL, APP_INITIAL } from '@/lib/app-config';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -42,7 +42,7 @@ function LoginContent() {
 
   const handleGoogleSignIn = async () => {
     setGoogleLoading(true);
-    const { error } = await supabase.auth.signInWithOAuth({
+    const { error } = await platform.auth.signInWithOAuth({
       provider: 'google',
       options: {
         redirectTo: `${window.location.origin}/auth/callback${redirectTo ? `?redirect=${encodeURIComponent(redirectTo)}` : ''}`,
@@ -55,7 +55,7 @@ function LoginContent() {
   };
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    platform.auth.getSession().then(({ data: { session } }) => {
       if (session) router.replace(redirectTo || '/app');
     });
   }, [router, redirectTo]);
@@ -63,16 +63,16 @@ function LoginContent() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { error } = await platform.auth.signInWithPassword({ email, password });
     if (error) {
       toast.error(error.message);
       setLoading(false);
     } else {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { user } } = await platform.auth.getUser();
       if (user) {
-        const { data: profile } = await supabase.from('profiles').select('disabled').eq('id', user.id).maybeSingle();
+        const { data: profile } = await platform.from('profiles').select('disabled').eq('id', user.id).maybeSingle();
         if (profile?.disabled) {
-          await supabase.auth.signOut();
+          await platform.auth.signOut();
           router.replace('/login?disabled=true');
           setLoading(false);
           return;

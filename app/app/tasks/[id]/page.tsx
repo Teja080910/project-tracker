@@ -57,7 +57,7 @@ import { EmptyState } from '@/components/shared/empty-state';
 import { PaginationControls } from '@/components/shared/pagination';
 import { ConfirmDeleteDialog } from '@/components/shared/confirm-delete-dialog';
 import { DatePicker } from '@/components/shared/date-picker';
-import { supabase } from '@/lib/supabase/client';
+import { platform } from '@/lib/platform/client';
 import { useAuth } from '@/lib/auth-context';
 import { isGlobalAdmin } from '@/lib/access';
 import { sendNotificationEmail } from '@/lib/email-client';
@@ -160,7 +160,7 @@ export default function TaskDetailPage() {
   const fetchTask = useCallback(async () => {
     if (!user) return;
 
-    const query = supabase
+    const query = platform
       .from('tasks')
       .select('*, project:projects(*), version:versions(*), assignee:profiles!assignee_id(*), reporter:profiles!reporter_id(*)');
     const { data: taskData } = isUuid(taskParam)
@@ -179,30 +179,30 @@ export default function TaskDetailPage() {
     setEditTitle(task.title);
 
     const [commentsRes, activityRes, membersRes, versionsRes, ownerRes, myMembershipRes, teamMembershipRes, teamMembersRes] = await Promise.all([
-      supabase
+      platform
         .from('comments')
         .select('*, profile:profiles(*)')
         .eq('task_id', resolvedTaskId)
         .order('created_at', { ascending: true }),
-      supabase
+      platform
         .from('activity_logs')
         .select('*, profile:profiles(*)')
         .eq('task_id', resolvedTaskId)
         .order('created_at', { ascending: false }),
-      supabase
+      platform
         .from('project_members')
         .select('profile:profiles(*)')
         .eq('project_id', task.project_id),
-      supabase.from('versions').select('*').eq('project_id', task.project_id).order('created_at', { ascending: false }),
-      supabase.from('profiles').select('*').eq('id', task.project?.owner_id ?? '').maybeSingle(),
-      supabase
+      platform.from('versions').select('*').eq('project_id', task.project_id).order('created_at', { ascending: false }),
+      platform.from('profiles').select('*').eq('id', task.project?.owner_id ?? '').maybeSingle(),
+      platform
         .from('project_members')
         .select('role')
         .eq('project_id', task.project_id)
         .eq('user_id', user.id)
         .maybeSingle(),
       task.project?.team_id
-        ? supabase
+        ? platform
             .from('team_members')
             .select('role')
             .eq('team_id', task.project.team_id)
@@ -210,7 +210,7 @@ export default function TaskDetailPage() {
             .maybeSingle()
         : Promise.resolve({ data: null }),
       task.project?.team_id
-        ? supabase
+        ? platform
             .from('team_members')
             .select('profile:profiles(*)')
             .eq('team_id', task.project.team_id)
@@ -231,7 +231,7 @@ export default function TaskDetailPage() {
     setComments(commentRows);
     const commentIds = commentRows.map((c: any) => c.id);
     if (commentIds.length > 0) {
-      const { data: reactionRows } = await supabase
+      const { data: reactionRows } = await platform
         .from('comment_reactions')
         .select('*')
         .in('comment_id', commentIds);
@@ -267,7 +267,7 @@ export default function TaskDetailPage() {
   // Realtime subscription for live comments
   useEffect(() => {
     if (!user || !taskId) return;
-    const channel = supabase
+    const channel = platform
       .channel(`comments:${taskId}`)
       .on(
         'postgres_changes',
@@ -275,7 +275,7 @@ export default function TaskDetailPage() {
         async (payload) => {
           const newComment = payload.new as unknown as Comment;
           // Avoid duplicates: skip if this is the comment we just inserted
-          const { data: profileData } = await supabase
+          const { data: profileData } = await platform
             .from('profiles')
             .select('*')
             .eq('id', newComment.user_id)
@@ -297,12 +297,12 @@ export default function TaskDetailPage() {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      platform.removeChannel(channel);
     };
   }, [user, taskId]);
 
   const getImageUrl = (path: string) => {
-    const { data } = supabase.storage.from('task-screenshots').getPublicUrl(path);
+    const { data } = platform.storage.from('task-screenshots').getPublicUrl(path);
     return data.publicUrl;
   };
 
@@ -528,7 +528,7 @@ export default function TaskDetailPage() {
       (r) => r.comment_id === commentId && r.user_id === user.id && r.emoji === emoji
     );
     if (existing) {
-      const { error } = await supabase.from('comment_reactions').delete().eq('id', existing.id);
+      const { error } = await platform.from('comment_reactions').delete().eq('id', existing.id);
       if (error) {
         toast.error(error.message);
         return;
@@ -536,7 +536,7 @@ export default function TaskDetailPage() {
       setReactions((prev) => prev.filter((r: any) => r.id !== existing.id));
       return;
     }
-    const { data, error } = await supabase
+    const { data, error } = await platform
       .from('comment_reactions')
       .insert({ comment_id: commentId, user_id: user.id, emoji })
       .select()
@@ -563,7 +563,7 @@ export default function TaskDetailPage() {
         const ext = file.name.split('.').pop() ?? 'png';
         const fileType = file.type || (isMarkdownType(null, file.name) ? 'text/markdown' : null);
         const storageName = `${task.project_id}/${taskId}/comments/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-        const { error: uploadError } = await supabase.storage
+        const { error: uploadError } = await platform.storage
           .from('task-screenshots')
           .upload(storageName, file, {
             contentType: fileType ?? undefined,
@@ -581,7 +581,7 @@ export default function TaskDetailPage() {
     }
 
     const singleAttachment = uploaded.length === 1 ? uploaded[0] : null;
-    const { error } = await supabase.from('comments').insert({
+    const { error } = await platform.from('comments').insert({
       task_id: taskId,
       user_id: user.id,
       message: uploaded.length === 0 ? commentText : commentText || 'Attachment',
@@ -601,7 +601,7 @@ export default function TaskDetailPage() {
     }
 
     try {
-      const { error: logErr } = await supabase.from('activity_logs').insert({
+      const { error: logErr } = await platform.from('activity_logs').insert({
         project_id: task.project_id,
         task_id: taskId,
         user_id: user.id,
@@ -624,7 +624,7 @@ export default function TaskDetailPage() {
         return m.id !== user.id && commentText.includes(`@${name}`);
       });
       for (const m of mentioned) {
-        const { error: notifErr } = await supabase.from('notifications').insert({
+        const { error: notifErr } = await platform.from('notifications').insert({
           ...notifBase,
           user_id: m.id,
           type: 'mention',
@@ -648,7 +648,7 @@ export default function TaskDetailPage() {
 
       // Notify assignee (if not already mentioned)
       if (task.assignee_id && task.assignee_id !== user.id && !mentioned.some((m: any) => m.id === task.assignee_id)) {
-        const { error: notifErr } = await supabase.from('notifications').insert({
+        const { error: notifErr } = await platform.from('notifications').insert({
           ...notifBase,
           user_id: task.assignee_id,
           type: 'comment_added',
@@ -689,7 +689,7 @@ export default function TaskDetailPage() {
       return;
     }
     setCommentEditLoading(true);
-    const { error } = await supabase
+    const { error } = await platform
       .from('comments')
       .update({ message: editingCommentText.trim(), edited_at: new Date().toISOString() })
       .eq('id', editingCommentId)
@@ -708,14 +708,14 @@ export default function TaskDetailPage() {
   const updateTask = async (updates: Partial<Task>) => {
     if (!task || !user) return;
     const projectSuffix = task.project?.name ? ` · ${task.project.name}` : '';
-    const { error } = await supabase.from('tasks').update(updates).eq('id', taskId);
+    const { error } = await platform.from('tasks').update(updates).eq('id', taskId);
     if (error) {
       toast.error(error.message);
       return;
     }
     try {
       if (updates.status && updates.status !== task.status) {
-        const { error: logErr } = await supabase.from('activity_logs').insert({
+        const { error: logErr } = await platform.from('activity_logs').insert({
           project_id: task.project_id,
           task_id: taskId,
           user_id: user.id,
@@ -727,7 +727,7 @@ export default function TaskDetailPage() {
         if (logErr) throw logErr;
 
         if (task.assignee_id && task.assignee_id !== user.id) {
-          const { error: notifErr } = await supabase.from('notifications').insert({
+          const { error: notifErr } = await platform.from('notifications').insert({
             user_id: task.assignee_id,
             actor_id: user.id,
             project_id: task.project_id,
@@ -758,7 +758,7 @@ export default function TaskDetailPage() {
       if (updates.assignee_id !== undefined && updates.assignee_id !== task.assignee_id) {
         const newAssigneeId = updates.assignee_id;
         if (newAssigneeId && newAssigneeId !== user.id) {
-          const { error: notifErr } = await supabase.from('notifications').insert({
+          const { error: notifErr } = await platform.from('notifications').insert({
             user_id: newAssigneeId,
             actor_id: user.id,
             project_id: task.project_id,
@@ -785,7 +785,7 @@ export default function TaskDetailPage() {
             `/app/tasks/${task.number}`
           );
         }
-        const { error: logErr } = await supabase.from('activity_logs').insert({
+        const { error: logErr } = await platform.from('activity_logs').insert({
           project_id: task.project_id,
           task_id: taskId,
           user_id: user.id,
@@ -809,7 +809,7 @@ export default function TaskDetailPage() {
 
   const deleteTask = async () => {
     if (!task) return;
-    const { error } = await supabase
+    const { error } = await platform
       .from('tasks')
       .update({ deleted_at: new Date().toISOString(), deleted_by: user?.id })
       .eq('id', taskId);
@@ -822,7 +822,7 @@ export default function TaskDetailPage() {
   };
 
   const restoreTask = async () => {
-    const { error } = await supabase
+    const { error } = await platform
       .from('tasks')
       .update({ deleted_at: null, deleted_by: null })
       .eq('id', taskId);

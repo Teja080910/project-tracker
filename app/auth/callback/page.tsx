@@ -2,7 +2,7 @@
 
 import { useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { supabase } from '@/lib/supabase/client';
+import { platform } from '@/lib/platform/client';
 import { Loader2 } from 'lucide-react';
 
 export default function AuthCallbackPage() {
@@ -19,13 +19,13 @@ function CallbackContent() {
   const redirectTo = searchParams.get('redirect');
 
   useEffect(() => {
-    supabase.auth.onAuthStateChange(async (event, session) => {
+    platform.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session) {
-        const { data: { user } } = await supabase.auth.getUser();
+        const { data: { user } } = await platform.auth.getUser();
         if (user) {
-          const { data: profile } = await supabase.from('profiles').select('disabled').eq('id', user.id).maybeSingle();
+          const { data: profile } = await platform.from('profiles').select('disabled').eq('id', user.id).maybeSingle();
           if (profile?.disabled) {
-            await supabase.auth.signOut();
+            await platform.auth.signOut();
             router.replace('/login?disabled=true');
             return;
           }

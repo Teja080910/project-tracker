@@ -48,7 +48,7 @@ import { UserAvatar } from '@/components/shared/user-avatar';
 import { EmptyState } from '@/components/shared/empty-state';
 import { PaginationControls } from '@/components/shared/pagination';
 import { ConfirmDeleteDialog } from '@/components/shared/confirm-delete-dialog';
-import { supabase } from '@/lib/supabase/client';
+import { platform } from '@/lib/platform/client';
 import { useAuth } from '@/lib/auth-context';
 import { isGlobalAdmin, loadTeamAccess } from '@/lib/access';
 import { sendNotificationEmail } from '@/lib/email-client';
@@ -104,7 +104,7 @@ export default function ProjectDetailPage() {
   const fetchProject = useCallback(async () => {
     if (!user) return;
 
-    const { data: projectData } = await supabase
+    const { data: projectData } = await platform
       .from('projects')
       .select('*, team:teams(*)')
       .eq('slug', projectSlug)
@@ -118,15 +118,15 @@ export default function ProjectDetailPage() {
     const pid = projectRow.id;
 
     const [membersRes, versionsRes, teamAccess, teamRes] = await Promise.all([
-      supabase
+      platform
         .from('project_members')
         .select('*, profile:profiles(*)')
         .eq('project_id', pid)
         .order('created_at', { ascending: true }),
-      supabase.from('versions').select('*').eq('project_id', pid).order('created_at', { ascending: false }),
+      platform.from('versions').select('*').eq('project_id', pid).order('created_at', { ascending: false }),
       loadTeamAccess(user.id),
       isGlobalAdmin(profile)
-        ? supabase.from('teams').select('*').order('name', { ascending: true })
+        ? platform.from('teams').select('*').order('name', { ascending: true })
         : Promise.resolve({ data: [] as Team[] }),
     ]);
 
@@ -149,7 +149,7 @@ export default function ProjectDetailPage() {
       myTeamRole === 'owner' ||
       projectRow.owner_id === user.id
     ) {
-      const { data: profilesData } = await supabase.from('profiles').select('*').eq('disabled', false);
+      const { data: profilesData } = await platform.from('profiles').select('*').eq('disabled', false);
       setAllProfiles((profilesData as Profile[]) ?? []);
     }
 
@@ -161,11 +161,11 @@ export default function ProjectDetailPage() {
   }, [fetchProject]);
 
   const getPublicApkUrl = (storagePath: string) =>
-    supabase.storage.from('apks').getPublicUrl(storagePath).data.publicUrl;
+    platform.storage.from('apks').getPublicUrl(storagePath).data.publicUrl;
 
   const fetchApks = useCallback(async () => {
     if (!project) return;
-    const { data } = await supabase
+    const { data } = await platform
       .from('project_apks')
       .select('*, uploader:profiles(*)')
       .eq('project_id', project.id)
@@ -181,7 +181,7 @@ export default function ProjectDetailPage() {
     if (!user || !project) return;
     setApkUploading(true);
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
+      const { data: sessionData } = await platform.auth.getSession();
       const token = sessionData.session?.access_token;
       const form = new FormData();
       form.append('file', file);
@@ -208,13 +208,13 @@ export default function ProjectDetailPage() {
       toast.error('Please select a user');
       return;
     }
-    const { error } = await supabase
+    const { error } = await platform
       .from('project_members')
       .insert({ project_id: project?.id, user_id: newMemberId, role: newMemberRole });
     if (error) {
       toast.error(error.message);
     } else {
-      await supabase.from('notifications').insert({
+      await platform.from('notifications').insert({
         user_id: newMemberId,
         actor_id: user?.id,
         project_id: project?.id,
@@ -246,7 +246,7 @@ export default function ProjectDetailPage() {
   };
 
   const removeMember = async (memberId: string) => {
-    const { error } = await supabase.from('project_members').delete().eq('id', memberId);
+    const { error } = await platform.from('project_members').delete().eq('id', memberId);
     if (error) {
       toast.error(error.message);
     } else {
@@ -264,7 +264,7 @@ export default function ProjectDetailPage() {
   };
 
   const updateMemberRole = async (memberId: string, role: string) => {
-    const { error } = await supabase.from('project_members').update({ role }).eq('id', memberId);
+    const { error } = await platform.from('project_members').update({ role }).eq('id', memberId);
     if (error) {
       toast.error(error.message);
     } else {
@@ -274,7 +274,7 @@ export default function ProjectDetailPage() {
   };
 
   const deleteProject = async () => {
-    const { error } = await supabase.from('projects').delete().eq('id', project?.id);
+    const { error } = await platform.from('projects').delete().eq('id', project?.id);
     if (error) {
       toast.error(error.message);
     } else {
@@ -302,7 +302,7 @@ export default function ProjectDetailPage() {
       client_name: editClientName.trim() || null,
     };
     if (globalAdmin) patch.team_id = editTeamId || null;
-    const { error } = await supabase
+    const { error } = await platform
       .from('projects')
       .update(patch)
       .eq('id', project?.id);
@@ -453,7 +453,7 @@ export default function ProjectDetailPage() {
                   <Select
                     value={project.status}
                     onValueChange={async (v) => {
-                      await supabase.from('projects').update({ status: v }).eq('id', project?.id);
+                      await platform.from('projects').update({ status: v }).eq('id', project?.id);
                       await fetchProject();
                       toast.success('Project updated');
                     }}

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase/client';
+import { platform } from '@/lib/platform/client';
 import { APP_NAME, APP_LOGO_URL, APP_INITIAL } from '@/lib/app-config';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -32,7 +32,7 @@ export default function SignupPage() {
 
   const handleGoogleSignIn = async () => {
     setGoogleLoading(true);
-    const { error } = await supabase.auth.signInWithOAuth({
+    const { error } = await platform.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo: `${window.location.origin}/auth/callback` },
     });
@@ -43,7 +43,7 @@ export default function SignupPage() {
   };
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    platform.auth.getSession().then(({ data: { session } }) => {
       if (session) router.replace('/app');
     });
   }, [router]);
@@ -55,7 +55,7 @@ export default function SignupPage() {
       return;
     }
     setLoading(true);
-    const { data, error } = await supabase.auth.signUp({
+    const { data, error } = await platform.auth.signUp({
       email,
       password,
       options: { data: { full_name: fullName } },
@@ -64,7 +64,7 @@ export default function SignupPage() {
       toast.error(error.message);
       setLoading(false);
     } else if (data.session) {
-      await supabase.from('notifications').insert({
+      await platform.from('notifications').insert({
         user_id: data.session.user.id,
         type: 'welcome',
         title: 'Welcome to the workspace!',

@@ -19,7 +19,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { EmptyState } from '@/components/shared/empty-state';
-import { supabase } from '@/lib/supabase/client';
+import { platform } from '@/lib/platform/client';
 import { useAuth } from '@/lib/auth-context';
 import { isGlobalAdmin, loadTeamAccess, type TeamAccess } from '@/lib/access';
 import { getRoleLabel } from '@/lib/constants';
@@ -48,9 +48,9 @@ export default function TeamsPage() {
   const fetchTeams = useCallback(async () => {
     if (!user || !profile) return;
     const [teamsRes, memberRes, projectRes, teamAccess] = await Promise.all([
-      supabase.from('teams').select('*').order('name', { ascending: true }),
-      supabase.from('team_members').select('team_id').limit(1000),
-      supabase.from('projects').select('id, team_id').limit(1000),
+      platform.from('teams').select('*').order('name', { ascending: true }),
+      platform.from('team_members').select('team_id').limit(1000),
+      platform.from('projects').select('id, team_id').limit(1000),
       loadTeamAccess(user.id),
     ]);
 
@@ -80,7 +80,7 @@ export default function TeamsPage() {
       return;
     }
     setCreating(true);
-    const { error } = await supabase.from('teams').insert({
+    const { error } = await platform.from('teams').insert({
       name: name.trim(),
       description: description.trim() || null,
       owner_id: user.id,

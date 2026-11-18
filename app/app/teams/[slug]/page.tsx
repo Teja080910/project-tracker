@@ -41,7 +41,7 @@ import { BackButton } from '@/components/shared/back-button';
 import { UserAvatar } from '@/components/shared/user-avatar';
 import { EmptyState } from '@/components/shared/empty-state';
 import { ConfirmDeleteDialog } from '@/components/shared/confirm-delete-dialog';
-import { supabase } from '@/lib/supabase/client';
+import { platform } from '@/lib/platform/client';
 import { useAuth } from '@/lib/auth-context';
 import { isGlobalAdmin, loadTeamAccess, type TeamAccess } from '@/lib/access';
 import { TEAM_ROLES, getProjectStatusMeta, getRoleLabel } from '@/lib/constants';
@@ -90,7 +90,7 @@ export default function TeamDetailPage() {
   const fetchTeam = useCallback(async () => {
     if (!user || !profile) return;
 
-    const { data: teamData } = await supabase.from('teams').select('*').eq('slug', slug).maybeSingle();
+    const { data: teamData } = await platform.from('teams').select('*').eq('slug', slug).maybeSingle();
     const teamRow = teamData as Team | null;
     setTeam(teamRow);
     if (!teamRow) {
@@ -99,18 +99,18 @@ export default function TeamDetailPage() {
     }
 
     const [memberRes, projectRes, accessData, ownerRes] = await Promise.all([
-      supabase
+      platform
         .from('team_members')
         .select('*, profile:profiles(*)')
         .eq('team_id', teamRow.id)
         .order('created_at', { ascending: true }),
-      supabase
+      platform
         .from('projects')
         .select('*, team:teams(*)')
         .eq('team_id', teamRow.id)
         .order('created_at', { ascending: false }),
       loadTeamAccess(user.id),
-      supabase.from('profiles').select('*').eq('id', teamRow.owner_id).maybeSingle(),
+      platform.from('profiles').select('*').eq('id', teamRow.owner_id).maybeSingle(),
     ]);
 
     setMembers((memberRes.data as unknown as TeamMember[]) ?? []);
@@ -121,7 +121,7 @@ export default function TeamDetailPage() {
     setEditDescription(teamRow.description ?? '');
 
     if (isGlobalAdmin(profile) || accessData.adminTeamIds.has(teamRow.id) || teamRow.owner_id === user.id) {
-      const { data: profileRows } = await supabase
+      const { data: profileRows } = await platform
         .from('profiles')
         .select('*')
         .eq('disabled', false)
@@ -146,7 +146,7 @@ export default function TeamDetailPage() {
       return;
     }
     setSaving(true);
-    const { data, error } = await supabase
+    const { data, error } = await platform
       .from('teams')
       .update({ name: editName.trim(), description: editDescription.trim() || null })
       .eq('id', team.id)
@@ -170,7 +170,7 @@ export default function TeamDetailPage() {
   const deleteTeam = async () => {
     if (!team) return;
     setDeleting(true);
-    const { error } = await supabase.from('teams').delete().eq('id', team.id);
+    const { error } = await platform.from('teams').delete().eq('id', team.id);
     setDeleting(false);
     setDeleteOpen(false);
     if (error) {
@@ -187,7 +187,7 @@ export default function TeamDetailPage() {
       toast.error('Please select a user');
       return;
     }
-    const { error } = await supabase.from('team_members').insert({
+    const { error } = await platform.from('team_members').insert({
       team_id: team.id,
       user_id: newMemberId,
       role: newMemberRole,
@@ -196,7 +196,7 @@ export default function TeamDetailPage() {
       toast.error(error.message);
       return;
     }
-    await supabase.from('notifications').insert({
+    await platform.from('notifications').insert({
       user_id: newMemberId,
       actor_id: user.id,
       type: 'team_member_added',
@@ -213,7 +213,7 @@ export default function TeamDetailPage() {
   };
 
   const updateMemberRole = async (memberId: string, role: TeamRole) => {
-    const { error } = await supabase.from('team_members').update({ role }).eq('id', memberId);
+    const { error } = await platform.from('team_members').update({ role }).eq('id', memberId);
     if (error) {
       toast.error(error.message);
       return;
@@ -225,7 +225,7 @@ export default function TeamDetailPage() {
   const confirmRemoveMember = async () => {
     if (!removeMemberTarget) return;
     setRemoveMemberLoading(true);
-    const { error } = await supabase.from('team_members').delete().eq('id', removeMemberTarget.id);
+    const { error } = await platform.from('team_members').delete().eq('id', removeMemberTarget.id);
     setRemoveMemberLoading(false);
     setRemoveMemberTarget(null);
     if (error) {
@@ -243,7 +243,7 @@ export default function TeamDetailPage() {
       return;
     }
     setCreatingProject(true);
-    const { data, error } = await supabase
+    const { data, error } = await platform
       .from('projects')
       .insert({
         name: projectName.trim(),
@@ -262,13 +262,13 @@ export default function TeamDetailPage() {
     }
 
     if (globalAdmin) {
-      await supabase.from('project_members').insert({
+      await platform.from('project_members').insert({
         project_id: data.id,
         user_id: user.id,
         role: 'project_admin',
       });
     }
-    await supabase.from('activity_logs').insert({
+    await platform.from('activity_logs').insert({
       project_id: data.id,
       user_id: user.id,
       action: 'created project',

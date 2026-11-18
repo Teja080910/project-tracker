@@ -19,7 +19,7 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/auth-context';
 import { UserAvatar } from '@/components/shared/user-avatar';
 import { getRoleLabel } from '@/lib/constants';
-import { supabase } from '@/lib/supabase/client';
+import { platform } from '@/lib/platform/client';
 import { APP_NAME, APP_LOGO_URL, APP_INITIAL } from '@/lib/app-config';
 
 const navItems = [
@@ -43,32 +43,47 @@ export function Sidebar() {
 
   useEffect(() => {
     if (!profile) return;
+    let refreshTimer: ReturnType<typeof setTimeout> | null = null;
     const fetchCount = async () => {
-      const { count } = await supabase
+      const { count } = await platform
         .from('notifications')
         .select('id', { count: 'exact', head: true })
         .eq('user_id', profile.id)
         .eq('read', false);
       setUnreadCount(count ?? 0);
     };
+    const scheduleRefresh = () => {
+      if (refreshTimer) clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(() => {
+        refreshTimer = null;
+        void fetchCount();
+      }, 150);
+    };
     fetchCount();
 
-    const channel = supabase
+    const filter = `user_id=eq.${profile.id}`;
+    const channel = platform
       .channel(`sidebar-notifications:${profile.id}`)
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${profile.id}` },
-        () => setUnreadCount((c) => c + 1)
+        { event: 'INSERT', schema: 'public', table: 'notifications', filter },
+        scheduleRefresh
       )
       .on(
         'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'notifications', filter: `user_id=eq.${profile.id}` },
-        () => fetchCount()
+        { event: 'UPDATE', schema: 'public', table: 'notifications', filter },
+        scheduleRefresh
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'notifications', filter },
+        scheduleRefresh
       )
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      if (refreshTimer) clearTimeout(refreshTimer);
+      platform.removeChannel(channel);
     };
   }, [profile]);
 

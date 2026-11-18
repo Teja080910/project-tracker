@@ -1,8 +1,8 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState } from 'react';
-import type { Session, User } from '@/lib/supabase/client';
-import { supabase } from '@/lib/supabase/client';
+import type { Session, User } from '@/lib/platform/client';
+import { platform } from '@/lib/platform/client';
 import type { Profile } from '@/lib/types';
 
 interface AuthContextValue {
@@ -33,10 +33,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const fetchProfile = async (uid: string) => {
-    const { data } = await supabase.from('profiles').select('*').eq('id', uid).maybeSingle();
+    const { data } = await platform.from('profiles').select('*').eq('id', uid).maybeSingle();
     const profile = data as Profile | null;
     if (profile?.disabled) {
-      await supabase.auth.signOut();
+      await platform.auth.signOut();
       setSession(null);
       setUser(null);
       setProfile(null);
@@ -47,8 +47,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setProfile(profile);
 
     const [memberships, ownedTeams] = await Promise.all([
-      supabase.from('team_members').select('role').eq('user_id', uid),
-      supabase.from('teams').select('id').eq('owner_id', uid),
+      platform.from('team_members').select('role').eq('user_id', uid),
+      platform.from('teams').select('id').eq('owner_id', uid),
     ]);
     setTeamAdmin(
       (memberships.data ?? []).some((row: { role?: string }) => row.role === 'team_admin') ||
@@ -60,7 +60,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let mounted = true;
 
     const validateSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session } } = await platform.auth.getSession();
       if (!mounted) return;
       if (!session) {
         setSession(null);
@@ -70,10 +70,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setLoading(false);
         return;
       }
-      const { data: { user }, error } = await supabase.auth.getUser();
+      const { data: { user }, error } = await platform.auth.getUser();
       if (!mounted) return;
       if (error || !user) {
-        await supabase.auth.signOut();
+        await platform.auth.signOut();
         setSession(null);
         setUser(null);
         setProfile(null);
@@ -90,7 +90,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
+    } = platform.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED' && !session) {
         setSession(null);
         setUser(null);
@@ -117,7 +117,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    await platform.auth.signOut();
     setProfile(null);
     setTeamAdmin(false);
   };

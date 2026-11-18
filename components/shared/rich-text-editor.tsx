@@ -24,7 +24,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
-import { supabase } from '@/lib/supabase/client';
+import { platform } from '@/lib/platform/client';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -167,7 +167,7 @@ export function RichTextEditor({ content, onChange, projectId, placeholder, clas
     setUploading(true);
     const ext = file.name.split('.').pop() ?? 'png';
     const path = `${projectId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-    const { error } = await supabase.storage.from('docs').upload(path, file, {
+    const { error } = await platform.storage.from('docs').upload(path, file, {
       contentType: file.type,
       cacheControl: '3600',
     });
@@ -176,7 +176,7 @@ export function RichTextEditor({ content, onChange, projectId, placeholder, clas
       toast.error(error.message);
       return;
     }
-    const { data } = supabase.storage.from('docs').getPublicUrl(path);
+    const { data } = platform.storage.from('docs').getPublicUrl(path);
     editor.chain().focus().setImage({ src: data.publicUrl, alt: file.name }).run();
   };
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { supabase } from '@/lib/supabase/client';
+import { platform } from '@/lib/platform/client';
 import { useAuth } from '@/lib/auth-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -29,7 +29,7 @@ export default function ProfilePage() {
   }, [profile]);
 
   const getAvatarUrl = (path: string) => {
-    const { data } = supabase.storage.from('avatars').getPublicUrl(path);
+    const { data } = platform.storage.from('avatars').getPublicUrl(path);
     return data.publicUrl;
   };
 
@@ -45,21 +45,21 @@ export default function ProfilePage() {
       const path = `${user.id}/avatar.${ext}`;
 
       // Remove old avatar if it exists
-      const { data: existing } = await supabase.storage.from('avatars').list(user.id);
+      const { data: existing } = await platform.storage.from('avatars').list(user.id);
       if (existing && existing.length > 0) {
-        await supabase.storage
+        await platform.storage
           .from('avatars')
           .remove(existing.map((f: any) => `${user.id}/${f.name}`));
       }
 
-      const { error: uploadError } = await supabase.storage
+      const { error: uploadError } = await platform.storage
         .from('avatars')
         .upload(path, file, { upsert: true });
 
       if (uploadError) throw uploadError;
 
       const avatarUrl = getAvatarUrl(path);
-      const { error: dbError } = await supabase
+      const { error: dbError } = await platform
         .from('profiles')
         .update({ avatar_url: avatarUrl })
         .eq('id', user.id);
@@ -78,13 +78,13 @@ export default function ProfilePage() {
     if (!user) return;
     setUploading(true);
     try {
-      const { data: existing } = await supabase.storage.from('avatars').list(user.id);
+      const { data: existing } = await platform.storage.from('avatars').list(user.id);
       if (existing && existing.length > 0) {
-        await supabase.storage
+        await platform.storage
           .from('avatars')
           .remove(existing.map((f: any) => `${user.id}/${f.name}`));
       }
-      const { error } = await supabase
+      const { error } = await platform
         .from('profiles')
         .update({ avatar_url: null })
         .eq('id', user.id);
@@ -106,7 +106,7 @@ export default function ProfilePage() {
       return;
     }
     setLoading(true);
-    const { error } = await supabase
+    const { error } = await platform
       .from('profiles')
       .update({ full_name: fullName, github_id: githubId.trim() })
       .eq('id', user.id);
@@ -127,7 +127,7 @@ export default function ProfilePage() {
 
   const fetchTokens = async () => {
     if (!user) return;
-    const { data } = await supabase
+    const { data } = await platform
       .from('personal_access_tokens')
       .select('id, user_id, name, created_at, last_used_at')
       .eq('user_id', user.id)
@@ -149,7 +149,7 @@ export default function ProfilePage() {
       .map((b: any) => b.toString(16).padStart(2, '0'))
       .join('');
     setCreatingToken(true);
-    const { error } = await supabase.from('personal_access_tokens').insert({
+    const { error } = await platform.from('personal_access_tokens').insert({
       user_id: user.id,
       name: tokenName.trim() || 'apk-upload',
       token_hash: hash,
@@ -165,7 +165,7 @@ export default function ProfilePage() {
   };
 
   const revokeToken = async (id: string) => {
-    const { error } = await supabase.from('personal_access_tokens').delete().eq('id', id);
+    const { error } = await platform.from('personal_access_tokens').delete().eq('id', id);
     if (error) {
       toast.error(error.message);
       return;

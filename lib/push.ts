@@ -1,6 +1,6 @@
 'use client';
 
-import { supabase } from '@/lib/supabase/client';
+import { platform } from '@/lib/platform/client';
 
 const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? '';
 
@@ -72,7 +72,7 @@ export async function enablePushNotifications(userId: string): Promise<void> {
   }
 
   const json = subscription.toJSON();
-  const { error } = await supabase.from('push_subscriptions').upsert(
+  const { error } = await platform.from('push_subscriptions').upsert(
     {
       user_id: userId,
       endpoint: subscription.endpoint,
@@ -90,7 +90,7 @@ export async function disablePushNotifications(): Promise<void> {
   const registration = await navigator.serviceWorker.getRegistration('/');
   const subscription = await registration?.pushManager.getSubscription();
   if (!subscription) return;
-  await supabase.from('push_subscriptions').delete().eq('endpoint', subscription.endpoint);
+  await platform.from('push_subscriptions').delete().eq('endpoint', subscription.endpoint);
   await subscription.unsubscribe();
 }
 
@@ -101,7 +101,7 @@ export async function sendPushToUser(
   link: string
 ): Promise<void> {
   try {
-    const { data } = await supabase.auth.getSession();
+    const { data } = await platform.auth.getSession();
     const token = data.session?.access_token;
     if (!token) return;
     await fetch('/api/push/send', {

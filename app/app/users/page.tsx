@@ -26,7 +26,7 @@ import {
 import { UserAvatar } from '@/components/shared/user-avatar';
 import { EmptyState } from '@/components/shared/empty-state';
 import { PaginationControls } from '@/components/shared/pagination';
-import { supabase } from '@/lib/supabase/client';
+import { platform } from '@/lib/platform/client';
 import { useAuth } from '@/lib/auth-context';
 import { isGlobalAdmin } from '@/lib/access';
 import { ROLES, getRoleLabel } from '@/lib/constants';
@@ -55,33 +55,33 @@ export default function UsersPage() {
 
   const fetchUsers = useCallback(async () => {
     if (globalAdmin) {
-      const { data } = await supabase.from('profiles').select('*').order('created_at', { ascending: false });
+      const { data } = await platform.from('profiles').select('*').order('created_at', { ascending: false });
       setUsers((data as Profile[]) ?? []);
     } else {
       const [projectMemberships, teamMemberships] = await Promise.all([
-        supabase.from('project_members').select('project_id').eq('user_id', user?.id ?? ''),
-        supabase.from('team_members').select('team_id').eq('user_id', user?.id ?? ''),
+        platform.from('project_members').select('project_id').eq('user_id', user?.id ?? ''),
+        platform.from('team_members').select('team_id').eq('user_id', user?.id ?? ''),
       ]);
       const projectIds = projectMemberships.data?.map((m: any) => m.project_id) ?? [];
       const teamIds = teamMemberships.data?.map((m: any) => m.team_id) ?? [];
 
       const memberIds = new Set<string>();
       if (projectIds.length > 0) {
-        const { data: memberRows } = await supabase
+        const { data: memberRows } = await platform
           .from('project_members')
           .select('user_id')
           .in('project_id', projectIds);
         memberRows?.forEach((m: any) => memberIds.add(m.user_id));
       }
       if (teamIds.length > 0) {
-        const { data: memberRows } = await supabase
+        const { data: memberRows } = await platform
           .from('team_members')
           .select('user_id')
           .in('team_id', teamIds);
         memberRows?.forEach((m: any) => memberIds.add(m.user_id));
       }
 
-      const { data: createdUsers } = await supabase
+      const { data: createdUsers } = await platform
         .from('profiles')
         .select('id')
         .eq('created_by', user?.id ?? '');
@@ -90,7 +90,7 @@ export default function UsersPage() {
       if (memberIds.size === 0) {
         setUsers([]);
       } else {
-        const { data } = await supabase
+        const { data } = await platform
           .from('profiles')
           .select('*')
           .in('id', [...memberIds])
@@ -135,7 +135,7 @@ export default function UsersPage() {
   const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const updateRole = async (userId: string, role: string) => {
-    const { error } = await supabase.from('profiles').update({ role }).eq('id', userId);
+    const { error } = await platform.from('profiles').update({ role }).eq('id', userId);
     if (error) {
       toast.error(error.message);
     } else {
@@ -145,7 +145,7 @@ export default function UsersPage() {
   };
 
   const toggleDisabled = async (userId: string, disabled: boolean) => {
-    const { error } = await supabase.from('profiles').update({ disabled: !disabled }).eq('id', userId);
+    const { error } = await platform.from('profiles').update({ disabled: !disabled }).eq('id', userId);
     if (error) {
       toast.error(error.message);
     } else {
@@ -161,7 +161,7 @@ export default function UsersPage() {
       return;
     }
     setCreating(true);
-    const { data: { session } } = await supabase.auth.getSession();
+    const { data: { session } } = await platform.auth.getSession();
     const res = await fetch('/api/users/create', {
       method: 'POST',
       headers: {
