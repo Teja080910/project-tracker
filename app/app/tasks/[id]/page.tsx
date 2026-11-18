@@ -55,9 +55,12 @@ import {
   RotateCcw,
   Copy,
   CornerDownRight,
+  CornerUpLeft,
   ChevronDown,
   ChevronUp,
   Reply,
+  ListChecks,
+  Plus,
 } from 'lucide-react';
 import { BackButton } from '@/components/shared/back-button';
 import { UserAvatar } from '@/components/shared/user-avatar';
@@ -125,6 +128,11 @@ export default function TaskDetailPage() {
   const [activityPage, setActivityPage] = useState(1);
   const [showAllActivity, setShowAllActivity] = useState(false);
   const [assigneeOpen, setAssigneeOpen] = useState(false);
+  const [subtasks, setSubtasks] = useState<Task[]>([]);
+  const [parentTask, setParentTask] = useState<Pick<Task, 'id' | 'number' | 'title'> | null>(null);
+  const [subtaskTitle, setSubtaskTitle] = useState('');
+  const [subtaskCreating, setSubtaskCreating] = useState(false);
+  const [subtaskFormOpen, setSubtaskFormOpen] = useState(false);
   const ACTIVITY_PAGE_SIZE = 10;
   const ACTIVITY_PREVIEW_COUNT = 1;
 
@@ -160,7 +168,7 @@ export default function TaskDetailPage() {
     setTask(task);
     setEditTitle(task.title);
 
-    const [commentsRes, activityRes, membersRes, versionsRes, ownerRes, myMembershipRes, teamMembershipRes, teamMembersRes] = await Promise.all([
+    const [commentsRes, activityRes, membersRes, versionsRes, ownerRes, myMembershipRes, teamMembershipRes, teamMembersRes, subtasksRes, parentTaskRes] = await Promise.all([
       platform
         .from('comments')
         .select('*, profile:profiles(*)')
@@ -197,6 +205,14 @@ export default function TaskDetailPage() {
             .select('profile:profiles(*)')
             .eq('team_id', task.project.team_id)
         : Promise.resolve({ data: [] }),
+      platform
+        .from('tasks')
+        .select('*, assignee:profiles!assignee_id(*)')
+        .eq('parent_id', resolvedTaskId)
+        .order('created_at', { ascending: true }),
+      task.parent_id
+        ? platform.from('tasks').select('id, number, title').eq('id', task.parent_id).maybeSingle()
+        : Promise.resolve({ data: null }),
     ]);
 
     const myMembership = (myMembershipRes.data as { role: string } | null) ?? null;
@@ -208,6 +224,11 @@ export default function TaskDetailPage() {
     }
     setMyRole(myMembership?.role ?? null);
     setTeamRole(myTeamMembership?.role ?? null);
+
+    setSubtasks(
+      ((subtasksRes.data as unknown as Task[]) ?? []).filter((row) => !row.deleted_at)
+    );
+    setParentTask((parentTaskRes.data as Pick<Task, 'id' | 'number' | 'title'> | null) ?? null);
 
     const commentRows = (commentsRes.data as unknown as Comment[]) ?? [];
     setComments(commentRows);
@@ -878,6 +899,41 @@ export default function TaskDetailPage() {
     }
   };
 
+  const createSubtask = async () => {
+    if (!task || !user || !subtaskTitle.trim()) return;
+    setSubtaskCreating(true);
+    const { error } = await platform.from('tasks').insert({
+      project_id: task.project_id,
+      version_id: task.version_id ?? null,
+      parent_id: taskId,
+      title: subtaskTitle.trim(),
+      type: 'task',
+      status: 'open',
+      priority: task.priority,
+      reporter_id: user.id,
+    });
+    if (error) {
+      toast.error(error.message);
+      setSubtaskCreating(false);
+      return;
+    }
+    try {
+      await platform.from('activity_logs').insert({
+        project_id: task.project_id,
+        task_id: taskId,
+        user_id: user.id,
+        action: 'created a subtask',
+        entity_type: 'task',
+      });
+    } catch {
+      // non-fatal
+    }
+    setSubtaskTitle('');
+    setSubtaskCreating(false);
+    await fetchTask();
+    toast.success('Subtask created');
+  };
+
   const saveEdit = async () => {
     await updateTask({ title: editTitle });
     setEditing(false);
@@ -1028,6 +1084,16 @@ export default function TaskDetailPage() {
         <div className="flex items-center gap-2 flex-1">
           <TypeBadge type={task.type} />
           <span className="text-sm text-muted-foreground">#{task.number}</span>
+          {parentTask && (
+            <Link
+              href={`/app/tasks/${parentTask.number}`}
+              className="flex max-w-[320px] items-center gap-1 rounded-md border border-border/60 bg-secondary/40 px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-secondary/70 hover:text-foreground"
+              title={`Subtask of #${parentTask.number} ${parentTask.title}`}
+            >
+              <CornerUpLeft className="h-3 w-3 shrink-0" />
+              <span className="truncate">Subtask of #{parentTask.number} · {parentTask.title}</span>
+            </Link>
+          )}
         </div>
         {canDelete && !task.deleted_at && (
           <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => setDeleteTaskOpen(true)}>
@@ -1064,7 +1130,7 @@ export default function TaskDetailPage() {
 
       <div className="grid grid-cols-1 gap-6 xl:min-h-0 xl:flex-1 xl:grid-cols-[minmax(0,1fr)_360px]">
         {/* Main content */}
-        <div className="flex min-w-0 flex-col gap-6 xl:min-h-0">
+        <div className="flex min-w-0 flex-col gap-6 xl:min-h-0 xl:overflow-y-auto xl:pr-1">
           {/* Title */}
           <Card className="card-hover animate-fade-in-up stagger-1">
             <CardContent className="p-6">
@@ -1096,7 +1162,7 @@ export default function TaskDetailPage() {
           </Card>
 
           {/* Comments */}
-          <Card className="card-hover animate-fade-in-up stagger-2 flex flex-col overflow-hidden xl:min-h-0 xl:flex-1">
+          <Card className="card-hover animate-fade-in-up stagger-2 flex flex-col overflow-hidden xl:min-h-[420px] xl:flex-1">
             <CardHeader className="shrink-0">
               <CardTitle className="text-base flex items-center gap-2">
                 <MessageSquare className="h-4 w-4" />
@@ -1635,6 +1701,83 @@ export default function TaskDetailPage() {
                   </p>
                 </div>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Subtasks */}
+          <Card className="card-hover shrink-0 animate-fade-in-up stagger-3">
+            <CardHeader className="flex flex-row items-center justify-between pb-3">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <ListChecks className="h-4 w-4" />
+                Subtasks ({subtasks.length})
+              </CardTitle>
+              {!parentTask && !subtaskFormOpen && (
+                <Button size="sm" variant="outline" onClick={() => setSubtaskFormOpen(true)}>
+                  <Plus className="h-4 w-4 mr-1.5" />
+                  Add subtask
+                </Button>
+              )}
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {subtaskFormOpen && !parentTask && (
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <Input
+                    autoFocus
+                    placeholder="Subtask title..."
+                    value={subtaskTitle}
+                    onChange={(e) => setSubtaskTitle(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') createSubtask();
+                      if (e.key === 'Escape') {
+                        setSubtaskFormOpen(false);
+                        setSubtaskTitle('');
+                      }
+                    }}
+                  />
+                  <div className="flex items-center gap-1.5">
+                    <Button
+                      size="sm"
+                      onClick={createSubtask}
+                      disabled={subtaskCreating || !subtaskTitle.trim()}
+                    >
+                      {subtaskCreating ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Add'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setSubtaskFormOpen(false);
+                        setSubtaskTitle('');
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              )}
+              {subtasks.length === 0 ? (
+                <p className="py-2 text-center text-xs text-muted-foreground">
+                  {parentTask
+                    ? 'Subtasks cannot be nested further.'
+                    : 'No subtasks yet. Break this task into smaller pieces.'}
+                </p>
+              ) : (
+                <div className="space-y-1.5">
+                  {subtasks.map((sub) => (
+                    <Link
+                      key={sub.id}
+                      href={`/app/tasks/${sub.number}`}
+                      className="flex items-center gap-2.5 rounded-lg border border-border/50 px-3 py-2 transition-colors hover:border-border hover:bg-accent/40"
+                    >
+                      <TypeBadge type={sub.type} />
+                      <span className="font-mono text-[11px] text-muted-foreground">#{sub.number}</span>
+                      <span className="min-w-0 flex-1 truncate text-sm">{sub.title}</span>
+                      {sub.assignee && <UserAvatar profile={sub.assignee} className="h-5 w-5 shrink-0" />}
+                      <StatusBadge status={sub.status} />
+                    </Link>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>

@@ -105,6 +105,7 @@ export interface Task {
   number: number;
   project_id: string;
   version_id: string | null;
+  parent_id: string | null;
   title: string;
   description: string | null;
   type: TaskType;
