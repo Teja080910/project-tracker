@@ -11,24 +11,34 @@ concurrency:
 
 jobs:
   deploy:
-    name: Deploy to co-money VPS
+    name: Deploy to platform VPS
     runs-on: ubuntu-latest
     steps:
-      - name: Pull, build and restart
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          script_stop: true
-          command_timeout: 10m
-          script: |
-            set -e
-            cd /var/www/tracker
-            git fetch origin main
-            git reset --hard origin/main
-            npm install
-            npm run build
-            pm2 restart project-tracker
-            pm2 save
-            echo "Deployed $(git rev-parse --short HEAD)"
+      - uses: actions/checkout@v4
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.TRACKER_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "${{ secrets.TRACKER_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Sync source
+        run: |
+          rsync -az --delete \
+            --exclude '.git' \
+            --exclude '.github' \
+            --exclude 'node_modules' \
+            --exclude '.next' \
+            --exclude '.env*' \
+            --exclude '*.log' \
+            --exclude '*.tsbuildinfo' \
+            ./ "${{ secrets.TRACKER_USER }}@${{ secrets.TRACKER_HOST }}:/opt/aso/project-tracker/"
+
+      - name: Build and restart
+        run: |
+          ssh "${{ secrets.TRACKER_USER }}@${{ secrets.TRACKER_HOST }}" \
+            "cd /opt/aso/server/deploy && ./scripts/render-env.sh && docker compose -f docker-compose.all.yml up -d --build web-project-tracker"
+
+      - name: Done
+        run: echo "Deployed https://tracker.arkasodhara.tech"
