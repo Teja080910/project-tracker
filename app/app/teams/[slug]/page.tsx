@@ -41,10 +41,11 @@ import { BackButton } from '@/components/shared/back-button';
 import { UserAvatar } from '@/components/shared/user-avatar';
 import { EmptyState } from '@/components/shared/empty-state';
 import { ConfirmDeleteDialog } from '@/components/shared/confirm-delete-dialog';
+import { ProjectCard } from '@/components/shared/project-card';
 import { platform } from '@/lib/platform/client';
 import { useAuth } from '@/lib/auth-context';
 import { isGlobalAdmin, loadTeamAccess, type TeamAccess } from '@/lib/access';
-import { TEAM_ROLES, getProjectStatusMeta, getRoleLabel } from '@/lib/constants';
+import { TEAM_ROLES, getRoleLabel } from '@/lib/constants';
 import { cn, formatDate } from '@/lib/utils';
 import { toast } from 'sonner';
 import type { Profile, Project, Team, TeamMember, TeamRole } from '@/lib/types';
@@ -447,28 +448,10 @@ export default function TeamDetailPage() {
             </CardContent>
           </Card>
         ) : (
-          <div className="space-y-2">
-            {projects.map((project) => {
-              const statusMeta = getProjectStatusMeta(project.status);
-              return (
-                <Link key={project.id} href={`/app/projects/${project.slug}`}>
-                  <Card className="card-hover">
-                    <CardContent className="p-4 flex items-center gap-3">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                        <FolderKanban className="h-4 w-4" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{project.name}</p>
-                        <p className="text-xs text-muted-foreground truncate">
-                          {project.client_name ? `Client: ${project.client_name}` : formatDate(project.created_at)}
-                        </p>
-                      </div>
-                      <Badge variant="outline" className="text-xs">{statusMeta.label}</Badge>
-                    </CardContent>
-                  </Card>
-                </Link>
-              );
-            })}
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {projects.map((project, i) => (
+              <ProjectCard key={project.id} project={project} index={i} />
+            ))}
           </div>
         )}
       </div>
