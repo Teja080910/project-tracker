@@ -119,37 +119,6 @@ export default function TaskDetailPage() {
   const commentTextareaRef = useRef<HTMLTextAreaElement>(null);
   const editCommentTextareaRef = useRef<HTMLTextAreaElement>(null);
   const commentsListRef = useRef<HTMLDivElement>(null);
-  const activityCardRef = useRef<HTMLDivElement>(null);
-  const chatCardRef = useRef<HTMLDivElement>(null);
-  const [chatHeight, setChatHeight] = useState<number | null>(420);
-
-  // Chat card bottom = activity card bottom (desktop side-by-side only);
-  // keep chat height synced to activity height without self-triggering.
-  useEffect(() => {
-    const activityEl = activityCardRef.current;
-    if (!activityEl) return;
-    const sync = () => {
-      const chatEl = chatCardRef.current;
-      if (!chatEl) return;
-      if (window.innerWidth < 1024) {
-        // Mobile: let the card grow with its content so the composer is never clipped
-        setChatHeight(null);
-        return;
-      }
-      const activityBottom = activityEl.getBoundingClientRect().bottom;
-      const chatTop = chatEl.getBoundingClientRect().top;
-      const h = Math.max(200, Math.round(activityBottom - chatTop));
-      setChatHeight(h);
-    };
-    sync();
-    const observer = new ResizeObserver(sync);
-    observer.observe(activityEl);
-    window.addEventListener('resize', sync);
-    return () => {
-      observer.disconnect();
-      window.removeEventListener('resize', sync);
-    };
-  }, [loading]);
 
   // Keep the comment list scrolled to the latest message (scrolls only the list, never the page)
   useEffect(() => {
@@ -858,8 +827,8 @@ export default function TaskDetailPage() {
     return (
       <div className="space-y-6">
         <Skeleton className="h-8 w-48" />
-        <div className="grid lg:grid-cols-3 gap-6">
-          <Skeleton className="h-96 lg:col-span-2" />
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
+          <Skeleton className="h-96" />
           <Skeleton className="h-64" />
         </div>
       </div>
@@ -871,7 +840,7 @@ export default function TaskDetailPage() {
       <div className="text-center py-12">
         <p className="text-sm text-muted-foreground">You don&apos;t have access to this task. You must be a member of the project.</p>
         <Button variant="outline" className="mt-4" asChild>
-          <Link href="/app/projects">Back to Projects</Link>
+          <Link href="/app/teams">Back to Teams</Link>
         </Button>
       </div>
     );
@@ -882,7 +851,7 @@ export default function TaskDetailPage() {
       <div className="text-center py-12">
         <p className="text-sm text-muted-foreground">Task not found or you don&apos;t have access.</p>
         <Button variant="outline" className="mt-4" asChild>
-          <Link href="/app/projects">Back to Projects</Link>
+          <Link href="/app/teams">Back to Teams</Link>
         </Button>
       </div>
     );
@@ -914,8 +883,8 @@ export default function TaskDetailPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-3 animate-fade-in-up">
+    <div className="flex flex-col gap-6 xl:min-h-0 xl:flex-1">
+      <div className="flex shrink-0 items-center gap-3 animate-fade-in-up">
         <BackButton fallbackHref={backHref} />
         <div className="flex items-center gap-2 flex-1">
           <TypeBadge type={task.type} />
@@ -954,9 +923,9 @@ export default function TaskDetailPage() {
         loading={deleteTaskLoading}
       />
 
-      <div className="grid lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-6 xl:min-h-0 xl:flex-1 xl:grid-cols-[minmax(0,1fr)_360px]">
         {/* Main content */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="flex min-w-0 flex-col gap-6 xl:min-h-0">
           {/* Title */}
           <Card className="card-hover animate-fade-in-up stagger-1">
             <CardContent className="p-6">
@@ -988,11 +957,7 @@ export default function TaskDetailPage() {
           </Card>
 
           {/* Comments */}
-          <Card
-            ref={chatCardRef}
-            className="card-hover animate-fade-in-up stagger-2 flex flex-col"
-            style={chatHeight != null ? { height: chatHeight } : undefined}
-          >
+          <Card className="card-hover animate-fade-in-up stagger-2 flex flex-col overflow-hidden xl:min-h-0 xl:flex-1">
             <CardHeader className="shrink-0">
               <CardTitle className="text-base flex items-center gap-2">
                 <MessageSquare className="h-4 w-4" />
@@ -1383,7 +1348,7 @@ export default function TaskDetailPage() {
         </div>
 
         {/* Sidebar */}
-        <div className="space-y-6">
+        <div className="flex flex-col gap-6 xl:min-h-0 xl:overflow-y-auto xl:pr-1">
           <Card className="card-hover animate-fade-in-up stagger-2">
             <CardHeader>
               <CardTitle className="text-sm">Properties</CardTitle>
@@ -1574,7 +1539,7 @@ export default function TaskDetailPage() {
           </Card>
 
           {/* Activity */}
-          <Card ref={activityCardRef} className="card-hover animate-fade-in-up stagger-3">
+          <Card className="card-hover animate-fade-in-up stagger-3">
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-sm flex items-center gap-2">
                 <History className="h-4 w-4" />

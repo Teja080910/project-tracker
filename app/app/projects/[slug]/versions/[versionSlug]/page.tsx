@@ -86,7 +86,10 @@ function VersionDetailContent() {
   const [editReleaseDate, setEditReleaseDate] = useState('');
   const [editStatus, setEditStatus] = useState('active');
   const [saving, setSaving] = useState(false);
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(() => {
+    const p = Number.parseInt(searchParams.get('page') ?? '1', 10);
+    return Number.isFinite(p) && p > 0 ? p : 1;
+  });
   const PAGE_SIZE = 10;
 
   const updateParams = useCallback(
@@ -101,6 +104,22 @@ function VersionDetailContent() {
     },
     [searchParams, router]
   );
+
+  const changePage = useCallback(
+    (next: number) => {
+      const safe = Math.max(1, next);
+      setPage(safe);
+      updateParams({ page: safe > 1 ? String(safe) : '' });
+    },
+    [updateParams]
+  );
+
+  // Keep local page in sync when the URL changes (back/forward, direct link)
+  useEffect(() => {
+    const p = Number.parseInt(searchParams.get('page') ?? '1', 10);
+    const next = Number.isFinite(p) && p > 0 ? p : 1;
+    setPage((prev) => (prev === next ? prev : next));
+  }, [searchParams]);
 
   // New task modal state
   const [taskModalOpen, setTaskModalOpen] = useState(false);
@@ -203,8 +222,10 @@ function VersionDetailContent() {
   const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   useEffect(() => {
-    if (page > totalPages) setPage(1);
-  }, [page, totalPages]);
+    // Wait for the task list to load; otherwise an empty list would
+    // immediately clamp page 2+ back to page 1 and wipe the URL param.
+    if (!loading && page > totalPages) changePage(1);
+  }, [loading, page, totalPages, changePage]);
 
   // Assignees derived from the actual task list (includes non-member assignees)
   const assignees = Array.from(
@@ -898,7 +919,8 @@ function VersionDetailContent() {
             value={search}
             onChange={(e) => {
               setSearch(e.target.value);
-              updateParams({ q: e.target.value });
+              setPage(1);
+              updateParams({ q: e.target.value, page: '' });
             }}
             className="pl-9 h-9"
           />
@@ -909,7 +931,7 @@ function VersionDetailContent() {
             onValueChange={(v) => {
               setTaskView(v as 'active' | 'deleted');
               setPage(1);
-              updateParams({ view: v === 'deleted' ? 'deleted' : '' });
+              updateParams({ view: v === 'deleted' ? 'deleted' : '', page: '' });
             }}
           >
             <SelectTrigger className="h-9 w-full sm:w-36">
@@ -926,7 +948,7 @@ function VersionDetailContent() {
           onValueChange={(v) => {
             setFilterStatus(v);
             setPage(1);
-            updateParams({ status: v });
+            updateParams({ status: v, page: '' });
           }}
         >
           <SelectTrigger className="h-9 w-full sm:w-36">
@@ -944,7 +966,7 @@ function VersionDetailContent() {
           onValueChange={(v) => {
             setFilterType(v);
             setPage(1);
-            updateParams({ type: v });
+            updateParams({ type: v, page: '' });
           }}
         >
           <SelectTrigger className="h-9 w-full sm:w-32">
@@ -962,7 +984,7 @@ function VersionDetailContent() {
           onValueChange={(v) => {
             setFilterPriority(v);
             setPage(1);
-            updateParams({ priority: v });
+            updateParams({ priority: v, page: '' });
           }}
         >
           <SelectTrigger className="h-9 w-full sm:w-36">
@@ -980,7 +1002,7 @@ function VersionDetailContent() {
           onValueChange={(v) => {
             setFilterAssignee(v);
             setPage(1);
-            updateParams({ assignee: v });
+            updateParams({ assignee: v, page: '' });
           }}
         >
           <SelectTrigger className="h-9 w-full sm:w-40">
@@ -1082,7 +1104,7 @@ function VersionDetailContent() {
         page={page}
         pageSize={PAGE_SIZE}
         total={filtered.length}
-        onPageChange={setPage}
+        onPageChange={changePage}
       />
     </div>
   );

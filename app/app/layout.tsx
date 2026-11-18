@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/lib/auth-context';
 import { Sidebar } from '@/components/shared/sidebar';
@@ -8,6 +8,7 @@ import { Topbar } from '@/components/shared/topbar';
 import { GithubIdPrompt } from '@/components/shared/github-id-prompt';
 import { PushPrompt } from '@/components/shared/push-prompt';
 import { Skeleton } from '@/components/ui/skeleton';
+import { cn } from '@/lib/utils';
 import { APP_NAME } from '@/lib/app-config';
 import { ensureServiceWorker } from '@/lib/push';
 
@@ -46,6 +47,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
   }, [loading, user, profile, router, pathname]);
 
+  // Task detail page is a dense chat + properties layout: give it the full
+  // available width instead of squeezing it into a fixed max-w-6xl box.
+  const isTaskDetail = useMemo(
+    () => /\/app\/tasks\/[^/]+/.test(pathname ?? ''),
+    [pathname]
+  );
+
   if (loading) {
     return (
       <div className="flex h-screen bg-background">
@@ -76,7 +84,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <div className="flex-1 flex flex-col overflow-hidden">
         <Topbar />
         <main className="flex-1 overflow-y-auto dashboard-bg">
-          <div className="container max-w-6xl mx-auto px-4 md:px-6 py-6 animate-fade-in">
+          <div
+            className={cn(
+              'mx-auto px-4 md:px-6 py-6 animate-fade-in',
+              isTaskDetail
+                ? 'w-full max-w-[1600px] xl:flex xl:h-full xl:min-h-0 xl:flex-col'
+                : 'container max-w-6xl'
+            )}
+          >
             <PushPrompt />
             {children}
           </div>
