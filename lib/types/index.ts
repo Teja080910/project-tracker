@@ -137,6 +137,7 @@ export interface Comment {
   id: string;
   task_id: string;
   user_id: string;
+  parent_id: string | null;
   message: string;
   image_path: string | null;
   file_type: string | null;

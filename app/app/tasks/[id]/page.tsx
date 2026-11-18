@@ -48,7 +48,17 @@ import {
   CommandItem,
   CommandList,
 } from '@/components/ui/command';
-import { Check, ChevronsUpDown, SmilePlus, RotateCcw } from 'lucide-react';
+import {
+  Check,
+  ChevronsUpDown,
+  SmilePlus,
+  RotateCcw,
+  Copy,
+  CornerDownRight,
+  ChevronDown,
+  ChevronUp,
+  Reply,
+} from 'lucide-react';
 import { BackButton } from '@/components/shared/back-button';
 import { UserAvatar } from '@/components/shared/user-avatar';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
@@ -105,6 +115,9 @@ export default function TaskDetailPage() {
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editingCommentText, setEditingCommentText] = useState('');
   const [commentEditLoading, setCommentEditLoading] = useState(false);
+  const [replyTo, setReplyTo] = useState<Comment | null>(null);
+  const [copiedCommentId, setCopiedCommentId] = useState<string | null>(null);
+  const [collapsedThreads, setCollapsedThreads] = useState<Set<string>>(new Set());
   const [deleteTaskOpen, setDeleteTaskOpen] = useState(false);
   const [deleteTaskLoading, setDeleteTaskLoading] = useState(false);
   const [myRole, setMyRole] = useState<string | null>(null);
@@ -518,11 +531,71 @@ export default function TaskDetailPage() {
     setReactions((prev) => (prev.some((r: any) => r.id === created.id) ? prev : [...prev, created]));
   };
 
+  const messagePreview = (comment: Comment) => {
+    const text = comment.message.trim();
+    if (text && text !== 'Attachment') return text;
+    const attachments = getCommentAttachments(comment);
+    return attachments.length ? attachments.map((a) => a.name ?? 'attachment').join(', ') : 'Attachment';
+  };
+
+  const copyComment = async (comment: Comment) => {
+    const text = comment.message.trim();
+    const value = text && text !== 'Attachment' ? text : messagePreview(comment);
+    const markCopied = () => {
+      setCopiedCommentId(comment.id);
+      window.setTimeout(
+        () => setCopiedCommentId((id) => (id === comment.id ? null : id)),
+        1600
+      );
+    };
+    const legacyCopy = () => {
+      const el = document.createElement('textarea');
+      el.value = value;
+      el.setAttribute('readonly', '');
+      el.style.position = 'fixed';
+      el.style.opacity = '0';
+      document.body.appendChild(el);
+      el.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(el);
+      return ok;
+    };
+    try {
+      if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(value);
+      else if (!legacyCopy()) throw new Error('copy failed');
+      markCopied();
+    } catch {
+      if (legacyCopy()) {
+        markCopied();
+        return;
+      }
+      toast.error('Could not copy message');
+    }
+  };
+
+  const startReply = (comment: Comment) => {
+    setReplyTo(comment);
+    requestAnimationFrame(() => {
+      commentTextareaRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      commentTextareaRef.current?.focus();
+    });
+  };
+
+  const toggleThread = (rootId: string) => {
+    setCollapsedThreads((prev) => {
+      const next = new Set(prev);
+      if (next.has(rootId)) next.delete(rootId);
+      else next.add(rootId);
+      return next;
+    });
+  };
+
   const addComment = async () => {
     const files = commentFiles.map((attachment) => attachment.file);
     if ((!newComment.trim() && files.length === 0) || !user || !task) return;
     setCommentLoading(true);
 
+    const parentComment = replyTo;
     const commentText = newComment.trim();
     const attachmentLabel = files.length > 1 ? 'Sent attachments' : 'Sent an image';
     const uploaded: { path: string; type: string | null; name: string }[] = [];
@@ -553,6 +626,7 @@ export default function TaskDetailPage() {
     const { error } = await platform.from('comments').insert({
       task_id: taskId,
       user_id: user.id,
+      parent_id: parentComment?.id ?? null,
       message: uploaded.length === 0 ? commentText : commentText || 'Attachment',
       image_path:
         uploaded.length === 0
@@ -615,6 +689,39 @@ export default function TaskDetailPage() {
         );
       }
 
+      // Notify the author of the message being replied to
+      const parentAuthorId = parentComment?.user_id ?? null;
+      if (
+        parentAuthorId &&
+        parentAuthorId !== user.id &&
+        !mentioned.some((m: any) => m.id === parentAuthorId) &&
+        parentAuthorId !== task.assignee_id
+      ) {
+        const { error: notifErr } = await platform.from('notifications').insert({
+          ...notifBase,
+          user_id: parentAuthorId,
+          type: 'comment_added',
+          title: `New reply on #${task.number}${projectSuffix}`,
+          body: commentText.slice(0, 100) || attachmentLabel,
+        });
+        if (notifErr) throw notifErr;
+        const parentAuthor = members.find((m: any) => m.id === parentAuthorId);
+        if (parentAuthor) {
+          sendNotificationEmail(
+            parentAuthor.email,
+            `New reply on #${task.number}${projectSuffix}`,
+            commentText.slice(0, 200) || attachmentLabel,
+            `${window.location.origin}${notifBase.link}`
+          );
+        }
+        sendPushToUser(
+          parentAuthorId,
+          `New reply on #${task.number}${projectSuffix}`,
+          commentText.slice(0, 100) || attachmentLabel,
+          notifBase.link
+        );
+      }
+
       // Notify assignee (if not already mentioned)
       if (task.assignee_id && task.assignee_id !== user.id && !mentioned.some((m: any) => m.id === task.assignee_id)) {
         const { error: notifErr } = await platform.from('notifications').insert({
@@ -643,6 +750,7 @@ export default function TaskDetailPage() {
       }
 
       setNewComment('');
+      setReplyTo(null);
       clearCommentFiles();
       await fetchTask();
     } catch (err) {
@@ -863,6 +971,8 @@ export default function TaskDetailPage() {
   }[] = [];
 
   for (const comment of comments) {
+    // Replies are rendered inside their thread, not in the main list.
+    if (comment.parent_id) continue;
     const previousGroup = commentGroups[commentGroups.length - 1];
     const previousComment = previousGroup?.comment;
     const isAttachmentOnly = comment.message.trim() === 'Attachment' && !!comment.image_path;
@@ -880,6 +990,35 @@ export default function TaskDetailPage() {
     } else {
       commentGroups.push({ comment, attachments: getCommentAttachments(comment) });
     }
+  }
+
+  // --- Threads -------------------------------------------------------------
+  const commentsById = new Map(comments.map((c) => [c.id, c]));
+
+  // Flatten nested replies under their thread root.
+  const rootIdFor = (comment: Comment) => {
+    let current = comment;
+    const seen = new Set<string>();
+    while (current.parent_id && !seen.has(current.id)) {
+      seen.add(current.id);
+      const parent = commentsById.get(current.parent_id);
+      if (!parent) break;
+      current = parent;
+    }
+    return current.id;
+  };
+
+  const threadReplies = new Map<string, Comment[]>();
+  for (const comment of comments) {
+    if (!comment.parent_id) continue;
+    const rootId = rootIdFor(comment);
+    if (rootId === comment.id) continue;
+    const list = threadReplies.get(rootId) ?? [];
+    list.push(comment);
+    threadReplies.set(rootId, list);
+  }
+  for (const list of threadReplies.values()) {
+    list.sort((a, b) => a.created_at.localeCompare(b.created_at));
   }
 
   return (
@@ -961,7 +1100,7 @@ export default function TaskDetailPage() {
             <CardHeader className="shrink-0">
               <CardTitle className="text-base flex items-center gap-2">
                 <MessageSquare className="h-4 w-4" />
-                Comments ({commentGroups.length})
+                Comments ({comments.length})
               </CardTitle>
             </CardHeader>
             <CardContent className="p-0 flex-1 flex flex-col overflow-hidden">
@@ -1200,6 +1339,24 @@ export default function TaskDetailPage() {
                               {comment.profile?.full_name ?? comment.profile?.email}
                             </span>
                             <span>{formatRelativeTime(comment.created_at)}</span>
+                            {!isEditingThis && (
+                              <button
+                                onClick={() => copyComment(comment)}
+                                className="text-muted-foreground/60 hover:text-foreground transition-colors"
+                                title="Copy message"
+                              >
+                                {copiedCommentId === comment.id ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                              </button>
+                            )}
+                            {!isEditingThis && (
+                              <button
+                                onClick={() => startReply(comment)}
+                                className="text-muted-foreground/60 hover:text-foreground transition-colors"
+                                title="Reply in thread"
+                              >
+                                <Reply className="h-3 w-3" />
+                              </button>
+                            )}
                             {isMine && !isEditingThis && (
                               <button
                                 onClick={() => {
@@ -1213,6 +1370,120 @@ export default function TaskDetailPage() {
                               </button>
                             )}
                           </div>
+
+                          {/* Thread */}
+                          {(threadReplies.get(comment.id)?.length ?? 0) > 0 && (() => {
+                            const replies = threadReplies.get(comment.id)!;
+                            const collapsed = collapsedThreads.has(comment.id);
+                            return (
+                              <div className="mt-2 w-full overflow-hidden rounded-xl border border-border/60 bg-secondary/20">
+                                <button
+                                  type="button"
+                                  onClick={() => toggleThread(comment.id)}
+                                  className="flex w-full items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-secondary/40 hover:text-foreground"
+                                >
+                                  <MessageSquare className="h-3.5 w-3.5" />
+                                  {replies.length} {replies.length === 1 ? 'reply' : 'replies'}
+                                  {collapsed ? (
+                                    <ChevronDown className="ml-auto h-3.5 w-3.5" />
+                                  ) : (
+                                    <ChevronUp className="ml-auto h-3.5 w-3.5" />
+                                  )}
+                                </button>
+                                {!collapsed && (
+                                  <div className="space-y-2.5 border-t border-border/50 px-3 py-2.5">
+                                    {replies.map((reply) => {
+                                      const replyParent = reply.parent_id ? commentsById.get(reply.parent_id) : null;
+                                      const replyIsMine = reply.user_id === user?.id;
+                                      const replyAttachments = getCommentAttachments(reply);
+                                      return (
+                                        <div key={reply.id} className="flex gap-2">
+                                          <UserAvatar profile={reply.profile} className="mt-0.5 h-6 w-6 shrink-0" />
+                                          <div className="min-w-0 flex-1">
+                                            {replyParent && replyParent.id !== comment.id && (
+                                              <p className="mb-1 flex items-center gap-1 text-[10px] text-muted-foreground">
+                                                <CornerDownRight className="h-3 w-3" />
+                                                replying to{' '}
+                                                <span className="font-medium">
+                                                  {replyParent.profile?.full_name ?? replyParent.profile?.email}
+                                                </span>
+                                              </p>
+                                            )}
+                                            <div
+                                              className={cn(
+                                                'rounded-xl px-3 py-2 text-sm break-words whitespace-pre-wrap',
+                                                replyIsMine
+                                                  ? 'rounded-tr-sm bg-primary text-primary-foreground'
+                                                  : 'rounded-tl-sm bg-secondary/70 text-foreground'
+                                              )}
+                                            >
+                                              {replyAttachments.length > 0 && (
+                                                <div className="mb-1.5 flex flex-wrap gap-1.5">
+                                                  {replyAttachments.map((attachment, attachmentIndex) => {
+                                                    const url = getImageUrl(attachment.path);
+                                                    const key = `${attachment.path}-${attachmentIndex}`;
+                                                    if (isImageType(attachment.type) || !attachment.type) {
+                                                      return (
+                                                        <img
+                                                          key={key}
+                                                          src={url}
+                                                          alt={attachment.name ?? 'reply attachment'}
+                                                          className="h-20 w-20 cursor-pointer rounded-md object-cover"
+                                                          onClick={() => setPreviewFile({ url, type: 'image' })}
+                                                        />
+                                                      );
+                                                    }
+                                                    return (
+                                                      <a
+                                                        key={key}
+                                                        href={url}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="flex items-center gap-1 rounded-md border border-border/60 bg-card/50 px-2 py-1 text-[11px] hover:bg-accent/50"
+                                                      >
+                                                        <FileIcon className="h-3 w-3 text-primary" />
+                                                        {attachment.name ?? 'File'}
+                                                      </a>
+                                                    );
+                                                  })}
+                                                </div>
+                                              )}
+                                              {reply.message.trim() !== '' && reply.message.trim() !== ' ' && (
+                                                <p>{renderMessage(reply.message)}</p>
+                                              )}
+                                              {reply.edited_at && (
+                                                <span className="mt-1 block text-[10px] opacity-70">(edited)</span>
+                                              )}
+                                            </div>
+                                            <div className="mt-1 flex items-center gap-2 px-1 text-[11px] text-muted-foreground">
+                                              <span className="font-medium">
+                                                {reply.profile?.full_name ?? reply.profile?.email}
+                                              </span>
+                                              <span>{formatRelativeTime(reply.created_at)}</span>
+                                              <button
+                                                onClick={() => copyComment(reply)}
+                                                className="text-muted-foreground/60 transition-colors hover:text-foreground"
+                                                title="Copy message"
+                                              >
+                                                {copiedCommentId === reply.id ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                                              </button>
+                                              <button
+                                                onClick={() => startReply(reply)}
+                                                className="text-muted-foreground/60 transition-colors hover:text-foreground"
+                                                title="Reply in thread"
+                                              >
+                                                <Reply className="h-3 w-3" />
+                                              </button>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </div>
                       </div>
                     );
@@ -1224,6 +1495,27 @@ export default function TaskDetailPage() {
               <div className="flex gap-3 border-t border-border/60 p-4 shrink-0">
                 <UserAvatar profile={profile} className="h-8 w-8 shrink-0" />
                 <div className="flex-1 space-y-2">
+                  {replyTo && (
+                    <div className="flex items-start justify-between gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2">
+                      <div className="flex min-w-0 items-start gap-2">
+                        <CornerDownRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+                        <div className="min-w-0">
+                          <p className="text-[11px] font-medium text-primary">
+                            Replying to {replyTo.profile?.full_name ?? replyTo.profile?.email ?? 'message'}
+                          </p>
+                          <p className="truncate text-[11px] text-muted-foreground">{messagePreview(replyTo)}</p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setReplyTo(null)}
+                        className="shrink-0 text-muted-foreground transition-colors hover:text-foreground"
+                        title="Cancel reply"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  )}
                   {commentFiles.length > 0 && (
                     <div className="flex flex-wrap gap-2">
                       {commentFiles.map((attachment, index) => (
