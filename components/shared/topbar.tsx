@@ -458,6 +458,7 @@ function MobileNav({ onNavigate }: { onNavigate: () => void }) {
     { href: '/app/teams', label: 'Teams' },
     { href: '/app/calendar', label: 'Calendar' },
     { href: '/app/notifications', label: 'Notifications' },
+    { href: '/app/guide', label: 'Guide' },
     ...(isAdmin ? [{ href: '/app/users', label: 'Users' }] : []),
     { href: '/app/profile', label: 'Profile' },
     { href: '/app/settings', label: 'Settings' },

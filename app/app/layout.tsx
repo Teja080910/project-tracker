@@ -16,6 +16,7 @@ const PAGE_TITLES: Record<string, string> = {
   teams: 'Teams',
   projects: 'Projects',
   tasks: 'Task',
+  guide: 'Guide',
   calendar: 'Calendar',
   notifications: 'Notifications',
   users: 'Users',

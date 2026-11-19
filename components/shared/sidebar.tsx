@@ -13,6 +13,7 @@ import {
   ChevronRight,
   Sparkles,
   CalendarDays,
+  BookOpen,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/lib/auth-context';
@@ -26,6 +27,7 @@ const navItems = [
   { href: '/app/teams', label: 'Teams', icon: UsersRound },
   { href: '/app/calendar', label: 'Calendar', icon: CalendarDays },
   { href: '/app/notifications', label: 'Notifications', icon: Bell },
+  { href: '/app/guide', label: 'Guide', icon: BookOpen },
   { href: '/app/users', label: 'Users', icon: Users, adminOnly: true },
 ];
 

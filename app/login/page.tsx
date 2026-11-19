@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { platform } from '@/lib/platform/client';
 import { APP_NAME, APP_LOGO_URL, APP_INITIAL } from '@/lib/app-config';
@@ -8,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { Loader2, ArrowRight, Mail, Lock, Eye, EyeOff, AlertTriangle } from 'lucide-react';
+import { Loader2, ArrowRight, Mail, Lock, Eye, EyeOff, AlertTriangle, BookOpen } from 'lucide-react';
 
 function GoogleIcon() {
   return (
@@ -214,6 +215,14 @@ function LoginContent() {
               Sign up
             </button>
           </p>
+
+          <Link
+            href="/guide"
+            className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <BookOpen className="h-3.5 w-3.5" />
+            New here? Read the tracker guide
+          </Link>
         </div>
       </div>
     </div>
