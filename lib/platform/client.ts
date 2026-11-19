@@ -170,6 +170,7 @@ class QueryBuilder<T = any> implements PromiseLike<QueryResult<T>> {
   private eqs: Filter[] = [];
   private neqs: Filter[] = [];
   private ins: InFilter[] = [];
+  private ilikes: Array<{ column: string; pattern: string }> = [];
   private orderBy?: { column: string; ascending: boolean };
   private limitCount?: number;
   private singleMode?: 'true' | 'maybe';
@@ -192,13 +193,16 @@ class QueryBuilder<T = any> implements PromiseLike<QueryResult<T>> {
   }
 
   ilike(column: string, pattern: string) {
-    this.eqs.push({ column, value: pattern.replace(/%/g, '') });
+    this.ilikes.push({ column, pattern: pattern.replace(/%/g, '') });
     return this;
   }
 
+  /** Supports one or more comma-separated `column.ilike.pattern` expressions. */
   or(expression: string) {
-    const match = expression.match(/^([\w.]+)\.ilike\.(.+)$/);
-    if (match) this.eqs.push({ column: match[1]!, value: match[2]!.replace(/%/g, '') });
+    for (const part of expression.split(',')) {
+      const match = part.trim().match(/^([\w.]+)\.ilike\.(.+)$/);
+      if (match) this.ilikes.push({ column: match[1]!, pattern: match[2]!.replace(/%/g, '') });
+    }
     return this;
   }
 
@@ -291,6 +295,9 @@ class QueryBuilder<T = any> implements PromiseLike<QueryResult<T>> {
     }
     if (this.ins.length) {
       params.set('in', this.ins.map((filter) => `${filter.column}:${filter.values.map(String).join('|')}`).join(','));
+    }
+    if (this.ilikes.length) {
+      params.set('ilike', this.ilikes.map((filter) => `${filter.column}:${filter.pattern}`).join(','));
     }
     if (this.orderBy) params.set('order', `${this.orderBy.column}:${this.orderBy.ascending ? 'asc' : 'desc'}`);
     if (this.limitCount) params.set('limit', String(this.limitCount));
