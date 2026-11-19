@@ -56,7 +56,7 @@ import { isGlobalAdmin, loadTeamAccess } from '@/lib/access';
 import { sendNotificationEmail } from '@/lib/email-client';
 import { sendPushToUser } from '@/lib/push';
 import { getProjectStatusMeta, getRoleLabel, getVersionStatusMeta } from '@/lib/constants';
-import { formatDate, cn } from '@/lib/utils';
+import { formatDate, formatRelativeTime, cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import type { Project, ProjectMember, Profile, Version, ProjectApk, Team } from '@/lib/types';
 
@@ -101,6 +101,10 @@ export default function ProjectDetailPage() {
   const [myRole, setMyRole] = useState<string | null>(null);
   const [accessRequest, setAccessRequest] = useState<{ status: string } | null>(null);
   const [requestLoading, setRequestLoading] = useState(false);
+  const [accessRequests, setAccessRequests] = useState<
+    Array<{ id: string; user_id: string; created_at: string; profile?: Profile }>
+  >([]);
+  const [requestActionId, setRequestActionId] = useState<string | null>(null);
   const canManage =
     globalAdmin || myRole === 'project_admin' || teamRole === 'team_admin' || project?.owner_id === user?.id;
   const canUploadApk = canManage || myRole === 'developer' || teamRole === 'developer';
@@ -161,6 +165,35 @@ export default function ProjectDetailPage() {
         .eq('user_id', user.id)
         .maybeSingle();
       setAccessRequest((requestRow as { status: string } | null) ?? null);
+    }
+
+    const isAdminNow =
+      isGlobalAdmin(profile) ||
+      myMembership?.role === 'project_admin' ||
+      myTeamRole === 'team_admin' ||
+      myTeamRole === 'owner' ||
+      projectRow.owner_id === user.id;
+
+    if (isAdminNow) {
+      const { data: requestRows } = await platform
+        .from('project_access_requests')
+        .select('*')
+        .eq('project_id', pid)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: true });
+      const rows = (requestRows as Array<{ id: string; user_id: string; created_at: string }>) ?? [];
+      const userIds = [...new Set(rows.map((row) => row.user_id))];
+      const people = new Map<string, Profile>();
+      if (userIds.length) {
+        const { data: profilesData } = await platform
+          .from('profiles')
+          .select('*')
+          .in('id', userIds);
+        for (const person of (profilesData as Profile[]) ?? []) people.set(person.id, person);
+      }
+      setAccessRequests(rows.map((row) => ({ ...row, profile: people.get(row.user_id) })));
+    } else {
+      setAccessRequests([]);
     }
 
     if (
@@ -289,6 +322,67 @@ export default function ProjectDetailPage() {
     } catch {
       // The request is saved; notifications are best-effort.
     }
+  };
+
+  const resolveAccessRequest = async (
+    request: { id: string; user_id: string; profile?: Profile },
+    status: 'approved' | 'rejected'
+  ) => {
+    if (!project) return;
+    setRequestActionId(request.id);
+    const { error } = await platform
+      .from('project_access_requests')
+      .update({ status })
+      .eq('id', request.id);
+    if (error) {
+      toast.error(error.message);
+      setRequestActionId(null);
+      return;
+    }
+    if (status === 'approved') {
+      const { error: memberError } = await platform.from('project_members').insert({
+        project_id: project.id,
+        user_id: request.user_id,
+        role: 'developer',
+      });
+      if (memberError && !/duplicate|conflict|unique/i.test(memberError.message)) {
+        toast.error(memberError.message);
+      }
+    }
+    try {
+      const title =
+        status === 'approved'
+          ? `Access granted: ${project.name}`
+          : `Access request declined: ${project.name}`;
+      const body =
+        status === 'approved'
+          ? 'You can now open this project.'
+          : 'Ask a team admin if you still need access.';
+      await platform.from('notifications').insert({
+        user_id: request.user_id,
+        actor_id: user?.id,
+        project_id: project.id,
+        type: status === 'approved' ? 'access_approved' : 'access_rejected',
+        title,
+        body,
+        link: `/app/projects/${project.slug}`,
+      });
+      if (request.profile?.email) {
+        sendNotificationEmail(
+          request.profile.email,
+          title,
+          body,
+          `${window.location.origin}/app/projects/${project.slug}`
+        );
+      }
+      sendPushToUser(request.user_id, title, body, `/app/projects/${project.slug}`);
+    } catch {
+      // best effort
+    }
+    setAccessRequests((prev) => prev.filter((row) => row.id !== request.id));
+    setRequestActionId(null);
+    if (status === 'approved') await fetchProject();
+    toast.success(status === 'approved' ? 'Access granted' : 'Request rejected');
   };
 
   const addMember = async () => {
@@ -667,6 +761,59 @@ export default function ProjectDetailPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Access requests */}
+      {canManage && accessRequests.length > 0 && (
+        <Card className="animate-fade-in-up">
+          <CardHeader className="flex flex-row items-center justify-between pb-3">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <Lock className="h-4 w-4" />
+              Access requests ({accessRequests.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {accessRequests.map((request) => (
+              <div
+                key={request.id}
+                className="flex flex-wrap items-center gap-3 rounded-lg border border-border/60 px-3 py-2"
+              >
+                <UserAvatar profile={request.profile} className="h-7 w-7" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">
+                    {request.profile?.full_name ?? request.profile?.email ?? 'User'}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">
+                    {formatRelativeTime(request.created_at)} · Developer access
+                  </p>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Button
+                    size="sm"
+                    className="h-8"
+                    onClick={() => resolveAccessRequest(request, 'approved')}
+                    disabled={requestActionId === request.id}
+                  >
+                    {requestActionId === request.id ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      'Approve'
+                    )}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8"
+                    onClick={() => resolveAccessRequest(request, 'rejected')}
+                    disabled={requestActionId === request.id}
+                  >
+                    Reject
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Versions */}
       <div className="space-y-4 animate-fade-in-up stagger-1">
