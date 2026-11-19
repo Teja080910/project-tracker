@@ -20,6 +20,8 @@ import {
   Copy,
   Upload,
   BookOpen,
+  Lock,
+  Send,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -97,6 +99,8 @@ export default function ProjectDetailPage() {
 
   const globalAdmin = isGlobalAdmin(profile);
   const [myRole, setMyRole] = useState<string | null>(null);
+  const [accessRequest, setAccessRequest] = useState<{ status: string } | null>(null);
+  const [requestLoading, setRequestLoading] = useState(false);
   const canManage =
     globalAdmin || myRole === 'project_admin' || teamRole === 'team_admin' || project?.owner_id === user?.id;
   const canUploadApk = canManage || myRole === 'developer' || teamRole === 'developer';
@@ -140,6 +144,23 @@ export default function ProjectDetailPage() {
 
     if (isGlobalAdmin(profile)) {
       setTeams((teamRes.data as Team[]) ?? []);
+    }
+
+    const hasAccessNow =
+      isGlobalAdmin(profile) ||
+      !!myMembership ||
+      myTeamRole === 'team_admin' ||
+      myTeamRole === 'owner' ||
+      projectRow.owner_id === user.id;
+
+    if (!hasAccessNow) {
+      const { data: requestRow } = await platform
+        .from('project_access_requests')
+        .select('status')
+        .eq('project_id', pid)
+        .eq('user_id', user.id)
+        .maybeSingle();
+      setAccessRequest((requestRow as { status: string } | null) ?? null);
     }
 
     if (
@@ -200,6 +221,73 @@ export default function ProjectDetailPage() {
     } finally {
       setApkUploading(false);
       if (apkInputRef.current) apkInputRef.current.value = '';
+    }
+  };
+
+  const requestAccess = async () => {
+    if (!project || !user) return;
+    setRequestLoading(true);
+    const { error } = await platform.from('project_access_requests').insert({
+      project_id: project.id,
+      user_id: user.id,
+    });
+    setRequestLoading(false);
+    if (error && !/duplicate|conflict|unique/i.test(error.message)) {
+      toast.error(error.message);
+      return;
+    }
+    setAccessRequest({ status: 'pending' });
+    toast.success('Access request sent to the team admin');
+
+    // Best-effort notification to the team admins and owner.
+    try {
+      const recipients = new Set<string>();
+      if (project.team_id) {
+        const [{ data: teamAdmins }, { data: teamRow }] = await Promise.all([
+          platform.from('team_members').select('user_id, role').eq('team_id', project.team_id),
+          platform.from('teams').select('owner_id').eq('id', project.team_id).maybeSingle(),
+        ]);
+        for (const row of (teamAdmins ?? []) as Array<{ user_id: string; role: string }>) {
+          if (row.role === 'team_admin') recipients.add(row.user_id);
+        }
+        const ownerId = (teamRow as { owner_id?: string } | null)?.owner_id;
+        if (ownerId) recipients.add(ownerId);
+      }
+      recipients.delete(user.id);
+      if (recipients.size) {
+        const ids = [...recipients];
+        const { data: people } = await platform
+          .from('profiles')
+          .select('id, email, full_name')
+          .in('id', ids);
+        for (const id of ids) {
+          await platform.from('notifications').insert({
+            user_id: id,
+            actor_id: user.id,
+            project_id: project.id,
+            type: 'access_request',
+            title: `Access request for ${project.name}`,
+            body: `${profile?.full_name ?? profile?.email ?? 'A team member'} requested access`,
+            link: `/app/projects/${project.slug}`,
+          });
+        }
+        for (const person of (people ?? []) as Array<{ id: string; email: string }>) {
+          sendNotificationEmail(
+            person.email,
+            `Access request for ${project.name}`,
+            `${profile?.full_name ?? profile?.email ?? 'A team member'} requested access to ${project.name}`,
+            `${window.location.origin}/app/projects/${project.slug}`
+          );
+          sendPushToUser(
+            person.id,
+            `Access request for ${project.name}`,
+            `${profile?.full_name ?? profile?.email ?? 'A team member'} requested access`,
+            `/app/projects/${project.slug}`
+          );
+        }
+      }
+    } catch {
+      // The request is saved; notifications are best-effort.
     }
   };
 
@@ -361,6 +449,58 @@ export default function ProjectDetailPage() {
   }
 
   const statusMeta = getProjectStatusMeta(project.status);
+  const hasAccess =
+    globalAdmin ||
+    myRole !== null ||
+    teamRole === 'team_admin' ||
+    teamRole === 'owner' ||
+    project.owner_id === user?.id;
+
+  if (!hasAccess) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-3 animate-fade-in-up">
+          <BackButton fallbackHref={project.team?.slug ? `/app/teams/${project.team.slug}` : '/app/teams'} />
+          <div className="flex flex-1 items-center gap-2">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <FolderKanban className="h-4.5 w-4.5" />
+            </div>
+            <h1 className="text-2xl font-semibold tracking-tight">{project.name}</h1>
+            <Badge variant="outline" className="text-xs">{statusMeta.label}</Badge>
+          </div>
+        </div>
+        <Card className="animate-fade-in-up">
+          <CardContent className="flex flex-col items-center gap-4 py-14 text-center">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-500/10 text-amber-500">
+              <Lock className="h-6 w-6" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold">You don&apos;t have access to this project</h2>
+              <p className="mt-1 max-w-md text-sm text-muted-foreground">
+                {accessRequest?.status === 'pending'
+                  ? 'Your access request is pending approval from a team admin.'
+                  : 'You can see this project because you are in its team, but you need a project role to open it.'}
+              </p>
+            </div>
+            {accessRequest?.status === 'pending' ? (
+              <Badge variant="outline" className="border-amber-500/20 bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                Request pending
+              </Badge>
+            ) : (
+              <Button onClick={requestAccess} disabled={requestLoading}>
+                {requestLoading ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4 mr-2" />
+                )}
+                Request access
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
