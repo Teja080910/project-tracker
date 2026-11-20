@@ -1254,7 +1254,7 @@ export default function TaskDetailPage() {
           </Card>
 
           {/* Comments */}
-          <Card className="card-hover animate-fade-in-up stagger-2 flex flex-col overflow-hidden xl:min-h-[420px] xl:flex-1">
+          <Card className="card-hover animate-fade-in-up stagger-2 flex shrink-0 flex-col overflow-hidden xl:h-[calc(100vh_-_15rem)] xl:min-h-[560px]">
             <CardHeader className="shrink-0">
               <CardTitle className="text-base flex items-center gap-2">
                 <MessageSquare className="h-4 w-4" />
@@ -1268,7 +1268,7 @@ export default function TaskDetailPage() {
                   <EmptyState icon={MessageSquare} title="No comments yet" description="Start the conversation" />
                 </div>
               ) : (
-                <div ref={commentsListRef} className="flex-1 overflow-y-auto px-4 pt-3 space-y-3 min-h-0">
+                <div ref={commentsListRef} className="flex-1 overflow-y-auto px-5 pt-4 pb-2 space-y-4 min-h-0">
                   {commentGroups.map(({ comment, attachments: commentAttachments }) => {
                     const isMine = comment.user_id === user?.id;
                     const isEditingThis = editingCommentId === comment.id;
@@ -1292,9 +1292,9 @@ export default function TaskDetailPage() {
                             {comment.profile?.full_name ?? comment.profile?.email ?? 'Unknown user'}
                           </TooltipContent>
                         </Tooltip>
-                        <div className={`${isEditingThis ? 'flex-1 max-w-full' : 'max-w-[75%]'} min-w-0 ${isMine ? 'items-end' : 'items-start'} flex flex-col`}>
+                        <div className={`${isEditingThis ? 'flex-1 max-w-full' : 'max-w-[80%]'} min-w-0 ${isMine ? 'items-end' : 'items-start'} flex flex-col`}>
                           <div
-                            className={`rounded-2xl px-3.5 py-2.5 text-sm break-words whitespace-pre-wrap ${
+                            className={`rounded-2xl px-4 py-3 text-[15px] leading-relaxed break-words whitespace-pre-wrap ${
                               isMine
                                 ? 'bg-primary text-primary-foreground rounded-tr-sm [&_*]:selection:bg-white [&_*]:selection:text-primary selection:bg-white selection:text-primary'
                                 : 'bg-secondary/70 text-foreground rounded-tl-sm'
@@ -1638,7 +1638,7 @@ export default function TaskDetailPage() {
                                             ) : (
                                             <div
                                               className={cn(
-                                                'rounded-xl px-3 py-2 text-sm break-words whitespace-pre-wrap',
+                                                'rounded-xl px-3.5 py-2.5 text-[15px] leading-relaxed break-words whitespace-pre-wrap',
                                                 replyIsMine
                                                   ? 'rounded-tr-sm bg-primary text-primary-foreground'
                                                   : 'rounded-tl-sm bg-secondary/70 text-foreground'
