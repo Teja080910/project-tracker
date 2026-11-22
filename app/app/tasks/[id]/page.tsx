@@ -865,7 +865,9 @@ export default function TaskDetailPage() {
     try {
       if (updates.approval_status && updates.approval_status !== task.approval_status) {
         const approved = updates.approval_status === 'approved';
-        const action = approved ? 'approved task' : 'rejected task';
+        const rejected = updates.approval_status === 'rejected';
+        const requesting = updates.approval_status === 'pending';
+        const action = requesting ? 'requested approval' : approved ? 'approved task' : 'rejected task';
         const { error: logErr } = await platform.from('activity_logs').insert({
           project_id: task.project_id,
           task_id: taskId,
@@ -876,27 +878,36 @@ export default function TaskDetailPage() {
         });
         if (logErr) throw logErr;
 
-        const reporterId = task.reporter_id;
-        if (reporterId && reporterId !== user.id) {
-          const title = `${approved ? 'Task approved' : 'Task rejected'}: #${task.number}${projectSuffix}`;
+        // Requesting approval notifies the assignee; approving/rejecting
+        // notifies the reporter.
+        const targetId = requesting ? task.assignee_id : task.reporter_id;
+        if (targetId && targetId !== user.id) {
+          const title = requesting
+            ? `Approval requested: #${task.number}${projectSuffix}`
+            : `${approved ? 'Task approved' : 'Task rejected'}: #${task.number}${projectSuffix}`;
+          const type = requesting
+            ? 'task_approval_requested'
+            : approved
+              ? 'task_approved'
+              : 'task_rejected';
           const { error: notifErr } = await platform.from('notifications').insert({
             ...notifBase,
-            user_id: reporterId,
-            type: approved ? 'task_approved' : 'task_rejected',
+            user_id: targetId,
+            type,
             title,
             body: task.title,
           });
           if (notifErr) throw notifErr;
-          const reporter = members.find((m: any) => m.id === reporterId);
-          if (reporter) {
+          const target = members.find((m: any) => m.id === targetId);
+          if (target) {
             sendNotificationEmail(
-              reporter.email,
+              target.email,
               title,
               task.title,
               `${window.location.origin}/app/tasks/${task.number}`
             );
           }
-          sendPushToUser(reporterId, title, task.title, `/app/tasks/${task.number}`);
+          sendPushToUser(targetId, title, task.title, `/app/tasks/${task.number}`);
         }
       }
 
@@ -1070,6 +1081,10 @@ export default function TaskDetailPage() {
   const canApprove =
     awaitingApproval &&
     (user?.id === task?.assignee_id || isProjectAdmin || isGlobalAdmin(profile));
+  const canRequestApproval =
+    !!task?.assignee_id &&
+    approvalStatus !== 'pending' &&
+    (user?.id === task?.reporter_id || isProjectAdmin || isGlobalAdmin(profile));
   const backHref = task?.version
     ? `/app/projects/${task?.project?.slug ?? task?.project_id}/versions/${task.version.slug}`
     : `/app/projects/${task?.project?.slug ?? task?.project_id}`;
@@ -2011,7 +2026,7 @@ export default function TaskDetailPage() {
                 {awaitingApproval && (
                   <p className="text-[11px] text-muted-foreground">
                     {approvalStatus === 'rejected'
-                      ? 'Rejected by the assignee — reassign the task to restart approval.'
+                      ? 'Rejected by the assignee — request approval again after updating the task.'
                       : `Waiting for ${task.assignee?.full_name ?? task.assignee?.email ?? 'the assignee'} to approve before work starts.`}
                   </p>
                 )}
@@ -2047,23 +2062,37 @@ export default function TaskDetailPage() {
                       <span className="text-[10px] text-muted-foreground">No approval needed</span>
                     )}
                   </div>
-                  {canApprove && (
-                    <div className="flex shrink-0 gap-1">
-                      <Button
-                        size="sm"
-                        className="h-7 px-2 text-xs"
-                        onClick={() => updateTask({ approval_status: 'approved' })}
-                      >
-                        Approve
-                      </Button>
-                      {approvalStatus !== 'rejected' && (
+                  {(canApprove || canRequestApproval) && (
+                    <div className="flex shrink-0 flex-wrap justify-end gap-1">
+                      {canApprove && (
+                        <>
+                          <Button
+                            size="sm"
+                            className="h-7 px-2 text-xs"
+                            onClick={() => updateTask({ approval_status: 'approved' })}
+                          >
+                            Approve
+                          </Button>
+                          {approvalStatus !== 'rejected' && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 px-2 text-xs"
+                              onClick={() => updateTask({ approval_status: 'rejected' })}
+                            >
+                              Reject
+                            </Button>
+                          )}
+                        </>
+                      )}
+                      {canRequestApproval && (
                         <Button
                           size="sm"
-                          variant="outline"
+                          variant="ghost"
                           className="h-7 px-2 text-xs"
-                          onClick={() => updateTask({ approval_status: 'rejected' })}
+                          onClick={() => updateTask({ approval_status: 'pending' })}
                         >
-                          Reject
+                          Request approval
                         </Button>
                       )}
                     </div>

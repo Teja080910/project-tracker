@@ -145,8 +145,8 @@ export function TrackerGuide() {
               locked until the assignee approves.
             </div>
             <div className="rounded-lg border border-border/60 bg-secondary/30 px-3 py-2 text-xs text-muted-foreground">
-              <span className="font-medium text-foreground">Reassigning</span> resets the task to Pending for the new
-              assignee.
+              <span className="font-medium text-foreground">Reassigning</span> keeps the approval; the task creator can
+              request approval again if needed.
             </div>
           </div>
         </CardContent>
