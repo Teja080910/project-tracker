@@ -143,6 +143,7 @@ export default function TaskDetailPage() {
   const commentTextareaRef = useRef<HTMLTextAreaElement>(null);
   const editCommentTextareaRef = useRef<HTMLTextAreaElement>(null);
   const commentsListRef = useRef<HTMLDivElement>(null);
+  const markedReadRef = useRef<string | null>(null);
 
   // Keep the comment list scrolled to the latest message (scrolls only the list, never the page)
   useEffect(() => {
@@ -170,6 +171,18 @@ export default function TaskDetailPage() {
     const task = taskData as unknown as Task;
     setTask(task);
     setEditTitle(task.title);
+
+    // Opening a task clears the unread notifications that point at it,
+    // whether it was opened from the bell or from any other link.
+    if (markedReadRef.current !== String(task.number)) {
+      markedReadRef.current = String(task.number);
+      void platform
+        .from('notifications')
+        .update({ read: true })
+        .eq('user_id', user.id)
+        .eq('link', `/app/tasks/${task.number}`)
+        .eq('read', false);
+    }
 
     const [commentsRes, activityRes, membersRes, versionsRes, ownerRes, myMembershipRes, teamMembershipRes, teamMembersRes, subtasksRes, parentTaskRes] = await Promise.all([
       platform
