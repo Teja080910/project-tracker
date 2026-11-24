@@ -3,13 +3,14 @@
 import { Suspense, useEffect, useRef, useState, useCallback } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { Tag, Plus, Calendar, Search, Settings, Loader2, Check, ChevronsUpDown, File as FileIcon, X, RotateCcw } from 'lucide-react';
+import { Tag, Plus, Calendar, Search, Settings, Loader2, Check, ChevronsUpDown, File as FileIcon, X, RotateCcw, ListFilter } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select,
   SelectContent,
@@ -61,6 +62,16 @@ import { formatDate, cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import type { Version, Task, Project, Profile, TaskStatus } from '@/lib/types';
 
+const ALL_TASK_STATUSES = TASK_STATUSES.map((s) => s.value as TaskStatus);
+
+function parseStatusFilter(raw: string | null, defaults: TaskStatus[] | null): TaskStatus[] {
+  if (!raw || raw === 'all' || raw === 'default') return defaults ?? ALL_TASK_STATUSES;
+  const values = raw
+    .split(',')
+    .filter((value): value is TaskStatus => ALL_TASK_STATUSES.includes(value as TaskStatus));
+  return values.length ? values : ALL_TASK_STATUSES;
+}
+
 export default function VersionDetailPage() {
   return (
     <Suspense fallback={null}>
@@ -82,7 +93,9 @@ function VersionDetailContent() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState(() => searchParams.get('q') ?? '');
-  const [filterStatus, setFilterStatus] = useState<string>(() => searchParams.get('status') ?? 'all');
+  const [selectedStatuses, setSelectedStatuses] = useState<TaskStatus[]>(() =>
+    parseStatusFilter(searchParams.get('status'), getDefaultTaskStatuses(profile?.role))
+  );
   const [statusDefaults, setStatusDefaults] = useState<TaskStatus[] | null>(() =>
     getDefaultTaskStatuses(profile?.role)
   );
@@ -116,6 +129,29 @@ function VersionDetailContent() {
     },
     [searchParams, router]
   );
+
+  const applyStatuses = useCallback(
+    (next: TaskStatus[]) => {
+      filterTouchedRef.current = true;
+      const ordered = ALL_TASK_STATUSES.filter((status) => next.includes(status));
+      const values = ordered.length ? ordered : ALL_TASK_STATUSES;
+      setSelectedStatuses(values);
+      setPage(1);
+      updateParams({
+        status: values.length === ALL_TASK_STATUSES.length ? '' : values.join(','),
+        page: '',
+      });
+    },
+    [updateParams]
+  );
+
+  const toggleStatus = (status: TaskStatus) => {
+    applyStatuses(
+      selectedStatuses.includes(status)
+        ? selectedStatuses.filter((s) => s !== status)
+        : [...selectedStatuses, status]
+    );
+  };
 
   const changePage = useCallback(
     (next: number) => {
@@ -224,27 +260,28 @@ function VersionDetailContent() {
     fetchData();
   }, [fetchData]);
 
-  // Apply the role-based default only until the user picks a status themselves.
+  // Apply the role-based default only until the user picks statuses themselves.
   useEffect(() => {
-    if (initialStatusParamRef.current || filterTouchedRef.current) return;
-    setFilterStatus(statusDefaults ? 'default' : 'all');
+    if (filterTouchedRef.current) return;
+    const raw = initialStatusParamRef.current;
+    if (raw && raw !== 'all' && raw !== 'default') return;
+    setSelectedStatuses(raw === 'all' ? ALL_TASK_STATUSES : statusDefaults ?? ALL_TASK_STATUSES);
   }, [statusDefaults]);
 
   const isSuperAdmin = profile?.role === 'super_admin';
   const showDeleted = isSuperAdmin && taskView === 'deleted';
   const pool = showDeleted ? tasks.filter((t: any) => t.deleted_at) : tasks.filter((t: any) => !t.deleted_at);
 
-  const statusFilter: TaskStatus[] | null =
-    filterStatus === 'default'
-      ? statusDefaults
-      : filterStatus === 'all'
-        ? null
-        : [filterStatus as TaskStatus];
+  const statusLabel =
+    selectedStatuses.length === ALL_TASK_STATUSES.length
+      ? 'All Statuses'
+      : selectedStatuses.length <= 2
+        ? selectedStatuses.map((s) => getTaskStatusMeta(s).label).join(', ')
+        : `${selectedStatuses.length} statuses`;
 
   const filtered = pool.filter((t: any) => {
     const matchesSearch = t.title.toLowerCase().includes(search.toLowerCase());
-    const matchesStatus =
-      !statusFilter || statusFilter.length === 0 || statusFilter.includes(t.status as TaskStatus);
+    const matchesStatus = selectedStatuses.includes(t.status as TaskStatus);
     const matchesType = filterType === 'all' || t.type === filterType;
     const matchesPriority = filterPriority === 'all' || t.priority === filterPriority;
     const matchesAssignee =
@@ -978,30 +1015,57 @@ function VersionDetailContent() {
             </SelectContent>
           </Select>
         )}
-        <Select
-          value={filterStatus}
-          onValueChange={(v) => {
-            filterTouchedRef.current = true;
-            setFilterStatus(v);
-            setPage(1);
-            updateParams({ status: v, page: '' });
-          }}
-        >
-          <SelectTrigger className="h-9 w-full sm:w-44">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Statuses</SelectItem>
-            {statusDefaults && (
-              <SelectItem value="default">
-                My View: {statusDefaults.map((s) => getTaskStatusMeta(s).label).join(', ')}
-              </SelectItem>
-            )}
-            {TASK_STATUSES.map((s: any) => (
-              <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" className="h-9 w-full justify-between gap-2 sm:w-40">
+              <span className="truncate">{statusLabel}</span>
+              <ListFilter className="h-3.5 w-3.5 shrink-0 opacity-60" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-56 p-2">
+            <div className="flex items-center justify-between px-1 pb-1.5">
+              <span className="text-xs font-medium">Statuses</span>
+              <div className="flex gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-1.5 text-[11px]"
+                  onClick={() => applyStatuses(ALL_TASK_STATUSES)}
+                >
+                  All
+                </Button>
+                {statusDefaults && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-1.5 text-[11px]"
+                    onClick={() => applyStatuses(statusDefaults)}
+                  >
+                    My role
+                  </Button>
+                )}
+              </div>
+            </div>
+            <div className="space-y-0.5">
+              {TASK_STATUSES.map((s: any) => (
+                <div key={s.value} className="flex items-center gap-2 rounded-md px-1.5 py-1 hover:bg-accent">
+                  <Checkbox
+                    checked={selectedStatuses.includes(s.value as TaskStatus)}
+                    onCheckedChange={() => toggleStatus(s.value as TaskStatus)}
+                    aria-label={`Filter by ${s.label}`}
+                  />
+                  <button
+                    type="button"
+                    className="flex-1 text-left text-sm"
+                    onClick={() => toggleStatus(s.value as TaskStatus)}
+                  >
+                    {s.label}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </PopoverContent>
+        </Popover>
         <Select
           value={filterType}
           onValueChange={(v) => {
