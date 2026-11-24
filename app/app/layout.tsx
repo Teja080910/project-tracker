@@ -40,11 +40,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (!loading && !user) {
-      router.replace(`/login?redirect=${encodeURIComponent(pathname)}`);
-    }
     if (!loading && user && profile?.disabled) {
       router.replace('/login?disabled=true');
+      return;
+    }
+    if (!loading && (!user || !profile)) {
+      router.replace(`/login?redirect=${encodeURIComponent(pathname)}`);
     }
   }, [loading, user, profile, router, pathname]);
 

@@ -32,6 +32,11 @@ export type QueryResult<T = any> = {
 
 type Row = Record<string, unknown>;
 
+// Auth bootstrap must never hang: a stalled request would leave the app
+// stuck on the loading skeleton with no redirect to the login page.
+const FETCH_TIMEOUT_MS = 10_000;
+const timeoutSignal = () => AbortSignal.timeout(FETCH_TIMEOUT_MS);
+
 let tokenCache: { token: string; expiresAt: number } | null = null;
 let tokenPending: Promise<string | null> | null = null;
 
@@ -54,6 +59,7 @@ async function getToken(force = false): Promise<string | null> {
       const response = await fetch(`${AUTH_URL}/api/auth/token`, {
         credentials: 'include',
         cache: 'no-store',
+        signal: timeoutSignal(),
       });
       if (!response.ok) {
         tokenCache = null;
@@ -89,7 +95,11 @@ async function apiFetch(path: string, init: RequestInit = {}, retry = true): Pro
   const headers = new Headers(init.headers);
   if (token) headers.set('authorization', `Bearer ${token}`);
   if (init.body && !headers.has('content-type')) headers.set('content-type', 'application/json');
-  const response = await fetch(`${API_URL}${path}`, { ...init, headers });
+  const response = await fetch(`${API_URL}${path}`, {
+    ...init,
+    headers,
+    signal: init.signal ?? timeoutSignal(),
+  });
   if (response.status === 401 && retry) {
     const fresh = await getToken(true);
     if (fresh && fresh !== token) return apiFetch(path, init, false);
@@ -551,7 +561,11 @@ async function fetchSession(force = false): Promise<SessionValue | null> {
     return sessionCache.value;
   }
   try {
-    const response = await fetch(`${AUTH_URL}/api/auth/get-session`, { credentials: 'include', cache: 'no-store' });
+    const response = await fetch(`${AUTH_URL}/api/auth/get-session`, {
+      credentials: 'include',
+      cache: 'no-store',
+      signal: timeoutSignal(),
+    });
     if (!response.ok) {
       sessionCache = { at: Date.now(), value: null };
       return null;

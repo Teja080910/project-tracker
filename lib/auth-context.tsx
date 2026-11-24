@@ -32,17 +32,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [teamAdmin, setTeamAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  const fetchProfile = async (uid: string) => {
-    const { data } = await platform.from('profiles').select('*').eq('id', uid).maybeSingle();
+  const clearAuth = () => {
+    setSession(null);
+    setUser(null);
+    setProfile(null);
+    setTeamAdmin(false);
+    setLoading(false);
+  };
+
+  // A session without a profile is not a usable login: the app shell would
+  // render with a "Viewer" placeholder and every page would sit in its
+  // skeleton forever. Reject it like any other invalid session.
+  const fetchProfile = async (uid: string): Promise<boolean> => {
+    const { data, error } = await platform
+      .from('profiles')
+      .select('*')
+      .eq('id', uid)
+      .maybeSingle();
     const profile = data as Profile | null;
-    if (profile?.disabled) {
+    if (error || !profile || profile.disabled) {
       await platform.auth.signOut();
-      setSession(null);
-      setUser(null);
-      setProfile(null);
-      setTeamAdmin(false);
-      setLoading(false);
-      return;
+      clearAuth();
+      return false;
     }
     setProfile(profile);
 
@@ -54,36 +65,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       (memberships.data ?? []).some((row: { role?: string }) => row.role === 'team_admin') ||
         (ownedTeams.data ?? []).length > 0
     );
+    return true;
   };
 
   useEffect(() => {
     let mounted = true;
 
     const validateSession = async () => {
-      const { data: { session } } = await platform.auth.getSession();
-      if (!mounted) return;
-      if (!session) {
-        setSession(null);
-        setUser(null);
-        setProfile(null);
-        setTeamAdmin(false);
-        setLoading(false);
-        return;
+      try {
+        const { data: { session } } = await platform.auth.getSession();
+        if (!mounted) return;
+        if (!session) {
+          clearAuth();
+          return;
+        }
+        const { data: { user }, error } = await platform.auth.getUser();
+        if (!mounted) return;
+        if (error || !user) {
+          await platform.auth.signOut();
+          clearAuth();
+          return;
+        }
+        setSession(session);
+        setUser(user);
+        await fetchProfile(user.id);
+        if (mounted) setLoading(false);
+      } catch {
+        if (mounted) clearAuth();
       }
-      const { data: { user }, error } = await platform.auth.getUser();
-      if (!mounted) return;
-      if (error || !user) {
-        await platform.auth.signOut();
-        setSession(null);
-        setUser(null);
-        setProfile(null);
-        setTeamAdmin(false);
-        setLoading(false);
-        return;
-      }
-      setSession(session);
-      setUser(user);
-      fetchProfile(user.id).finally(() => mounted && setLoading(false));
     };
 
     validateSession();
@@ -91,22 +100,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const {
       data: { subscription },
     } = platform.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED' && !session) {
-        setSession(null);
-        setUser(null);
-        setProfile(null);
-        setTeamAdmin(false);
-        setLoading(false);
+      if (!mounted) return;
+      if (event === 'SIGNED_OUT' || (event === 'TOKEN_REFRESHED' && !session)) {
+        clearAuth();
         return;
       }
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
-        fetchProfile(session.user.id).finally(() => mounted && setLoading(false));
+        setLoading(true);
+        void fetchProfile(session.user.id).finally(() => mounted && setLoading(false));
       } else {
-        setProfile(null);
-        setTeamAdmin(false);
-        setLoading(false);
+        clearAuth();
       }
     });
 
