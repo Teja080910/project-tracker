@@ -49,10 +49,17 @@ import { platform } from '@/lib/platform/client';
 import { useAuth } from '@/lib/auth-context';
 import { sendPushToUser } from '@/lib/push';
 import { sendNotificationEmail } from '@/lib/email-client';
-import { getVersionStatusMeta, TASK_STATUSES, TASK_TYPES, TASK_PRIORITIES } from '@/lib/constants';
+import {
+  getVersionStatusMeta,
+  getTaskStatusMeta,
+  getDefaultTaskStatuses,
+  TASK_STATUSES,
+  TASK_TYPES,
+  TASK_PRIORITIES,
+} from '@/lib/constants';
 import { formatDate, cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import type { Version, Task, Project, Profile } from '@/lib/types';
+import type { Version, Task, Project, Profile, TaskStatus } from '@/lib/types';
 
 export default function VersionDetailPage() {
   return (
@@ -76,6 +83,11 @@ function VersionDetailContent() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState(() => searchParams.get('q') ?? '');
   const [filterStatus, setFilterStatus] = useState<string>(() => searchParams.get('status') ?? 'all');
+  const [statusDefaults, setStatusDefaults] = useState<TaskStatus[] | null>(() =>
+    getDefaultTaskStatuses(profile?.role)
+  );
+  const initialStatusParamRef = useRef(searchParams.get('status'));
+  const filterTouchedRef = useRef(false);
   const [filterType, setFilterType] = useState<string>(() => searchParams.get('type') ?? 'all');
   const [filterPriority, setFilterPriority] = useState<string>(() => searchParams.get('priority') ?? 'all');
   const [filterAssignee, setFilterAssignee] = useState<string>(() => searchParams.get('assignee') ?? 'all');
@@ -176,20 +188,29 @@ function VersionDetailContent() {
     // Fetch project members for the assignee picker (includes owner)
     const { data: membersData } = await platform
       .from('project_members')
-      .select('profile:profiles(*)')
+      .select('role, profile:profiles(*)')
       .eq('project_id', projectData.id);
     const memberProfiles = (membersData?.map((m: any) => m.profile) as unknown as Profile[]) ?? [];
+    const projectRole = (membersData as Array<{ role?: string; profile?: Profile }> | null)?.find(
+      (m) => m.profile?.id === user.id
+    )?.role ?? null;
+
+    let teamRole: string | null = null;
     if (projectData.team_id) {
       const { data: teamMembersData } = await platform
         .from('team_members')
-        .select('profile:profiles(*)')
+        .select('role, profile:profiles(*)')
         .eq('team_id', projectData.team_id);
-      for (const row of (teamMembersData ?? []) as Array<{ profile?: Profile }>) {
+      for (const row of (teamMembersData ?? []) as Array<{ role?: string; profile?: Profile }>) {
+        if (row.profile?.id === user.id) teamRole = row.role ?? null;
         if (row.profile && !memberProfiles.some((p) => p.id === row.profile!.id)) {
           memberProfiles.push(row.profile);
         }
       }
     }
+
+    // Project role wins, then team role, then the user's global role.
+    setStatusDefaults(getDefaultTaskStatuses(projectRole ?? teamRole ?? profile?.role));
     const { data: ownerData } = await platform.from('profiles').select('*').eq('id', projectData.owner_id).maybeSingle();
     if (ownerData && !memberProfiles.some((p: any) => p.id === ownerData.id)) {
       memberProfiles.push(ownerData as Profile);
@@ -197,19 +218,33 @@ function VersionDetailContent() {
     setMembers(memberProfiles);
 
     setLoading(false);
-  }, [user, projectSlug, versionSlug]);
+  }, [user, profile?.role, projectSlug, versionSlug]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
+  // Apply the role-based default only until the user picks a status themselves.
+  useEffect(() => {
+    if (initialStatusParamRef.current || filterTouchedRef.current) return;
+    setFilterStatus(statusDefaults ? 'default' : 'all');
+  }, [statusDefaults]);
+
   const isSuperAdmin = profile?.role === 'super_admin';
   const showDeleted = isSuperAdmin && taskView === 'deleted';
   const pool = showDeleted ? tasks.filter((t: any) => t.deleted_at) : tasks.filter((t: any) => !t.deleted_at);
 
+  const statusFilter: TaskStatus[] | null =
+    filterStatus === 'default'
+      ? statusDefaults
+      : filterStatus === 'all'
+        ? null
+        : [filterStatus as TaskStatus];
+
   const filtered = pool.filter((t: any) => {
     const matchesSearch = t.title.toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = filterStatus === 'all' || t.status === filterStatus;
+    const matchesStatus =
+      !statusFilter || statusFilter.length === 0 || statusFilter.includes(t.status as TaskStatus);
     const matchesType = filterType === 'all' || t.type === filterType;
     const matchesPriority = filterPriority === 'all' || t.priority === filterPriority;
     const matchesAssignee =
@@ -946,16 +981,22 @@ function VersionDetailContent() {
         <Select
           value={filterStatus}
           onValueChange={(v) => {
+            filterTouchedRef.current = true;
             setFilterStatus(v);
             setPage(1);
             updateParams({ status: v, page: '' });
           }}
         >
-          <SelectTrigger className="h-9 w-full sm:w-36">
+          <SelectTrigger className="h-9 w-full sm:w-44">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Statuses</SelectItem>
+            {statusDefaults && (
+              <SelectItem value="default">
+                My View: {statusDefaults.map((s) => getTaskStatusMeta(s).label).join(', ')}
+              </SelectItem>
+            )}
             {TASK_STATUSES.map((s: any) => (
               <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
             ))}

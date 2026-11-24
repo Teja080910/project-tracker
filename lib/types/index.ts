@@ -137,6 +137,17 @@ export interface TaskImage {
   created_at: string;
 }
 
+export interface TaskTestCase {
+  id: string;
+  task_id: string;
+  title: string;
+  checked: boolean;
+  checked_by: string | null;
+  checked_at: string | null;
+  created_by: string;
+  created_at: string;
+}
+
 export interface Comment {
   id: string;
   task_id: string;

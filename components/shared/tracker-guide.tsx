@@ -74,7 +74,7 @@ const ROLES: { role: string; color: string; text: string }[] = [
   {
     role: 'Tester',
     color: 'border-amber-500/20 bg-amber-500/10 text-amber-600 dark:text-amber-400',
-    text: 'Verifies work and moves tasks through testing statuses.',
+    text: 'Verifies work, checks test cases and moves tasks to Testing Completed.',
   },
   {
     role: 'Viewer',
@@ -239,7 +239,7 @@ export function TrackerGuide() {
               'Create a version, then add tasks inside it.',
               'Assign the task — the assignee approves it before work starts.',
               'Break work into subtasks and talk it through in the task chat.',
-              'Move the status forward as work progresses until it is done.',
+              'Move the status forward as work progresses — check all test cases before marking Testing Completed.',
             ].map((text, index) => (
               <li key={text} className="flex items-start gap-2.5">
                 <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-[11px] font-semibold text-primary">

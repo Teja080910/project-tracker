@@ -25,11 +25,21 @@ export const TASK_STATUSES: { value: TaskStatus; label: string; icon: LucideIcon
   { value: 'open', label: 'Open', icon: Circle, color: 'gray' },
   { value: 'in_progress', label: 'In Progress', icon: CircleDot, color: 'blue' },
   { value: 'testing', label: 'Testing', icon: FlaskConical, color: 'purple' },
-  { value: 'test_release', label: 'Test Release', icon: Rocket, color: 'amber' },
+  { value: 'test_release', label: 'Testing Completed', icon: Rocket, color: 'amber' },
   { value: 'released', label: 'Released', icon: BadgeCheck, color: 'green' },
   { value: 'completed', label: 'Completed', icon: CheckCircle2, color: 'green' },
   { value: 'cancelled', label: 'Cancelled', icon: CircleSlash, color: 'red' },
 ];
+
+/** Statuses shown by default for each working role. */
+export const DEVELOPER_DEFAULT_STATUSES: TaskStatus[] = ['open', 'in_progress', 'completed'];
+export const TESTER_DEFAULT_STATUSES: TaskStatus[] = ['testing', 'test_release'];
+
+export function getDefaultTaskStatuses(role?: string | null): TaskStatus[] | null {
+  if (role === 'developer') return DEVELOPER_DEFAULT_STATUSES;
+  if (role === 'tester') return TESTER_DEFAULT_STATUSES;
+  return null;
+}
 
 export const TASK_PRIORITIES: { value: TaskPriority; label: string; color: string }[] = [
   { value: 'low', label: 'Low', color: 'gray' },

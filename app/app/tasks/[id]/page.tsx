@@ -22,6 +22,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select,
   SelectContent,
@@ -79,7 +80,7 @@ import { sendPushToUser } from '@/lib/push';
 import { TASK_TYPES, TASK_STATUSES, TASK_PRIORITIES, getRoleLabel } from '@/lib/constants';
 import { formatDate, formatRelativeTime, cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import type { Task, Comment, CommentReaction, ActivityLog, Profile, Version, Project } from '@/lib/types';
+import type { Task, Comment, CommentReaction, ActivityLog, Profile, Version, Project, TaskTestCase } from '@/lib/types';
 
 const REACTION_EMOJIS = ['👍', '❤️', '😂', '🎉', '👀', '🙏'];
 
@@ -133,6 +134,8 @@ export default function TaskDetailPage() {
   const [assigneeOpen, setAssigneeOpen] = useState(false);
   const [subtasks, setSubtasks] = useState<Task[]>([]);
   const [parentTask, setParentTask] = useState<Pick<Task, 'id' | 'number' | 'title'> | null>(null);
+  const [testCases, setTestCases] = useState<TaskTestCase[]>([]);
+  const [newTestCase, setNewTestCase] = useState('');
   const [subtaskTitle, setSubtaskTitle] = useState('');
   const [subtaskCreating, setSubtaskCreating] = useState(false);
   const [subtaskFormOpen, setSubtaskFormOpen] = useState(false);
@@ -184,7 +187,7 @@ export default function TaskDetailPage() {
         .eq('read', false);
     }
 
-    const [commentsRes, activityRes, membersRes, versionsRes, ownerRes, myMembershipRes, teamMembershipRes, teamMembersRes, subtasksRes, parentTaskRes] = await Promise.all([
+    const [commentsRes, activityRes, membersRes, versionsRes, ownerRes, myMembershipRes, teamMembershipRes, teamMembersRes, subtasksRes, parentTaskRes, testCasesRes] = await Promise.all([
       platform
         .from('comments')
         .select('*, profile:profiles(*)')
@@ -229,6 +232,11 @@ export default function TaskDetailPage() {
       task.parent_id
         ? platform.from('tasks').select('id, number, title').eq('id', task.parent_id).maybeSingle()
         : Promise.resolve({ data: null }),
+      platform
+        .from('task_test_cases')
+        .select('*')
+        .eq('task_id', resolvedTaskId)
+        .order('created_at'),
     ]);
 
     const myMembership = (myMembershipRes.data as { role: string } | null) ?? null;
@@ -245,6 +253,7 @@ export default function TaskDetailPage() {
       ((subtasksRes.data as unknown as Task[]) ?? []).filter((row) => !row.deleted_at)
     );
     setParentTask((parentTaskRes.data as Pick<Task, 'id' | 'number' | 'title'> | null) ?? null);
+    setTestCases((testCasesRes.data as unknown as TaskTestCase[]) ?? []);
 
     const commentRows = (commentsRes.data as unknown as Comment[]) ?? [];
     setComments(commentRows);
@@ -850,6 +859,14 @@ export default function TaskDetailPage() {
 
   const updateTask = async (updates: Partial<Task>) => {
     if (!task || !user) return;
+    if (
+      updates.status === 'test_release' &&
+      (task.status !== 'testing' ||
+        !(testCases.length > 0 && testCases.every((tc) => tc.checked)))
+    ) {
+      toast.error('Move the task to Testing and check all test cases before marking Testing Completed');
+      return;
+    }
     const projectSuffix = task.project?.name ? ` · ${task.project.name}` : '';
     const notifBase = {
       actor_id: user.id,
@@ -1033,6 +1050,62 @@ export default function TaskDetailPage() {
     toast.success('Subtask created');
   };
 
+  const fetchTestCases = async () => {
+    if (!taskId) return;
+    const { data, error } = await platform
+      .from('task_test_cases')
+      .select('*')
+      .eq('task_id', taskId)
+      .order('created_at');
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    setTestCases((data as unknown as TaskTestCase[]) ?? []);
+  };
+
+  const addTestCase = async () => {
+    if (!task || !user || !newTestCase.trim()) return;
+    const { error } = await platform.from('task_test_cases').insert({
+      task_id: taskId,
+      title: newTestCase.trim(),
+      created_by: user.id,
+    });
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    setNewTestCase('');
+    await fetchTestCases();
+  };
+
+  const deleteTestCase = async (testCase: TaskTestCase) => {
+    if (!user || (testCase.created_by !== user.id && !isGlobalAdmin(profile))) return;
+    const { error } = await platform.from('task_test_cases').delete().eq('id', testCase.id);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    await fetchTestCases();
+  };
+
+  const toggleTestCase = async (testCase: TaskTestCase) => {
+    if (!user) return;
+    const { error } = await platform
+      .from('task_test_cases')
+      .update(
+        testCase.checked
+          ? { checked: false, checked_by: null, checked_at: null }
+          : { checked: true, checked_by: user.id, checked_at: new Date().toISOString() }
+      )
+      .eq('id', testCase.id);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    await fetchTestCases();
+  };
+
   const saveEdit = async () => {
     await updateTask({ title: editTitle });
     setEditing(false);
@@ -1085,6 +1158,9 @@ export default function TaskDetailPage() {
     !!task?.assignee_id &&
     approvalStatus !== 'pending' &&
     (user?.id === task?.reporter_id || isProjectAdmin || isGlobalAdmin(profile));
+  const allTestCasesChecked = testCases.length > 0 && testCases.every((tc) => tc.checked);
+  const canDeleteTestCase = (tc: TaskTestCase) =>
+    !!user && (tc.created_by === user.id || isGlobalAdmin(profile));
   const backHref = task?.version
     ? `/app/projects/${task?.project?.slug ?? task?.project_id}/versions/${task.version.slug}`
     : `/app/projects/${task?.project?.slug ?? task?.project_id}`;
@@ -1997,6 +2073,89 @@ export default function TaskDetailPage() {
               )}
             </CardContent>
           </Card>
+
+          {/* Test Cases */}
+          <Card className="card-hover shrink-0 animate-fade-in-up stagger-4">
+            <CardHeader className="flex flex-row items-center justify-between pb-3">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <ListChecks className="h-4 w-4" />
+                Test Cases ({testCases.length})
+              </CardTitle>
+              <span className="text-xs text-muted-foreground">
+                {testCases.filter((tc) => tc.checked).length}/{testCases.length} checked
+              </span>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <Input
+                  placeholder="Test case title..."
+                  value={newTestCase}
+                  onChange={(e) => setNewTestCase(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      addTestCase();
+                    }
+                  }}
+                />
+                <Button size="sm" onClick={addTestCase} disabled={!user || !newTestCase.trim()}>
+                  Add
+                </Button>
+              </div>
+              {testCases.length === 0 ? (
+                <p className="py-2 text-center text-xs text-muted-foreground">
+                  No test cases yet. Add the cases that must pass before testing is complete.
+                </p>
+              ) : (
+                <div className="space-y-1.5">
+                  {testCases.map((tc) => {
+                    const checkedBy = tc.checked_by
+                      ? members.find((m) => m.id === tc.checked_by)
+                      : null;
+                    return (
+                      <div
+                        key={tc.id}
+                        className="flex items-start gap-2.5 rounded-lg border border-border/50 px-3 py-2"
+                      >
+                        <Checkbox
+                          checked={tc.checked}
+                          onCheckedChange={() => toggleTestCase(tc)}
+                          disabled={!user}
+                          className="mt-0.5"
+                          aria-label={`Mark "${tc.title}" as checked`}
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className={cn('text-sm break-words', tc.checked && 'text-muted-foreground line-through')}>
+                            {tc.title}
+                          </p>
+                          {tc.checked && (
+                            <p className="text-[11px] text-muted-foreground">
+                              Checked by {checkedBy?.full_name ?? checkedBy?.email ?? 'unknown user'}
+                              {tc.checked_at ? ` · ${formatRelativeTime(tc.checked_at)}` : ''}
+                            </p>
+                          )}
+                        </div>
+                        {canDeleteTestCase(tc) && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
+                            onClick={() => deleteTestCase(tc)}
+                            aria-label="Delete test case"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              <p className="text-[11px] text-muted-foreground">
+                Move the task to Testing, then check every case before marking Testing Completed.
+              </p>
+            </CardContent>
+          </Card>
         </div>
 
         {/* Sidebar */}
@@ -2019,7 +2178,16 @@ export default function TaskDetailPage() {
                   </SelectTrigger>
                   <SelectContent>
                     {TASK_STATUSES.map((s: any) => (
-                      <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                      <SelectItem
+                        key={s.value}
+                        value={s.value}
+                        disabled={
+                          s.value === 'test_release' &&
+                          (task?.status !== 'testing' || !allTestCasesChecked)
+                        }
+                      >
+                        {s.label}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
