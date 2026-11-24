@@ -27,9 +27,29 @@ export const TASK_STATUSES: { value: TaskStatus; label: string; icon: LucideIcon
   { value: 'testing', label: 'Testing', icon: FlaskConical, color: 'purple' },
   { value: 'test_release', label: 'Testing Completed', icon: Rocket, color: 'amber' },
   { value: 'released', label: 'Released', icon: BadgeCheck, color: 'green' },
-  { value: 'completed', label: 'Completed', icon: CheckCircle2, color: 'green' },
+  { value: 'completed', label: 'Development Completed', icon: CheckCircle2, color: 'green' },
   { value: 'cancelled', label: 'Cancelled', icon: CircleSlash, color: 'red' },
 ];
+
+/** Ordered workflow: Open → Dev In Progress → Dev Complete → Test In Progress → Test Complete → Released. */
+export const TASK_STATUS_FLOW: TaskStatus[] = [
+  'open',
+  'in_progress',
+  'completed',
+  'testing',
+  'test_release',
+  'released',
+];
+
+export function canTransitionStatus(from: TaskStatus, to: TaskStatus): boolean {
+  if (from === to) return true;
+  if (to === 'cancelled') return true;
+  if (from === 'cancelled') return to === 'open';
+  const fromIndex = TASK_STATUS_FLOW.indexOf(from);
+  const toIndex = TASK_STATUS_FLOW.indexOf(to);
+  if (fromIndex < 0 || toIndex < 0) return false;
+  return toIndex <= fromIndex || toIndex === fromIndex + 1;
+}
 
 /** Statuses shown by default for each working role. */
 export const DEVELOPER_DEFAULT_STATUSES: TaskStatus[] = ['open', 'in_progress', 'completed'];

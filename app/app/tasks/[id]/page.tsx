@@ -77,7 +77,7 @@ import { useAuth } from '@/lib/auth-context';
 import { isGlobalAdmin } from '@/lib/access';
 import { sendNotificationEmail } from '@/lib/email-client';
 import { sendPushToUser } from '@/lib/push';
-import { TASK_TYPES, TASK_STATUSES, TASK_PRIORITIES, getRoleLabel } from '@/lib/constants';
+import { TASK_TYPES, TASK_STATUSES, TASK_PRIORITIES, getRoleLabel, canTransitionStatus } from '@/lib/constants';
 import { formatDate, formatRelativeTime, cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import type { Task, Comment, CommentReaction, ActivityLog, Profile, Version, Project, TaskTestCase } from '@/lib/types';
@@ -860,11 +860,20 @@ export default function TaskDetailPage() {
   const updateTask = async (updates: Partial<Task>) => {
     if (!task || !user) return;
     if (
-      updates.status === 'test_release' &&
-      (task.status !== 'testing' ||
-        !(testCases.length > 0 && testCases.every((tc) => tc.checked)))
+      updates.status &&
+      updates.status !== task.status &&
+      !canTransitionStatus(task.status, updates.status)
     ) {
-      toast.error('Move the task to Testing and check all test cases before marking Testing Completed');
+      toast.error(
+        'Follow the flow: Open → In Progress → Development Completed → Testing → Testing Completed → Released. Cancelled is allowed anytime.'
+      );
+      return;
+    }
+    if (
+      updates.status === 'test_release' &&
+      !(testCases.length > 0 && testCases.every((tc) => tc.checked))
+    ) {
+      toast.error('Check all test cases before marking Testing Completed');
       return;
     }
     const projectSuffix = task.project?.name ? ` · ${task.project.name}` : '';
@@ -2152,7 +2161,7 @@ export default function TaskDetailPage() {
                 </div>
               )}
               <p className="text-[11px] text-muted-foreground">
-                Move the task to Testing, then check every case before marking Testing Completed.
+                After development is complete and the task is in Testing, check every case before marking Testing Completed.
               </p>
             </CardContent>
           </Card>
@@ -2182,8 +2191,8 @@ export default function TaskDetailPage() {
                         key={s.value}
                         value={s.value}
                         disabled={
-                          s.value === 'test_release' &&
-                          (task?.status !== 'testing' || !allTestCasesChecked)
+                          !canTransitionStatus(task.status, s.value as Task['status']) ||
+                          (s.value === 'test_release' && !allTestCasesChecked)
                         }
                       >
                         {s.label}
@@ -2191,6 +2200,9 @@ export default function TaskDetailPage() {
                     ))}
                   </SelectContent>
                 </Select>
+                <p className="text-[11px] text-muted-foreground">
+                  Flow: Open → In Progress → Development Completed → Testing → Testing Completed → Released. Cancelled anytime.
+                </p>
                 {awaitingApproval && (
                   <p className="text-[11px] text-muted-foreground">
                     {approvalStatus === 'rejected'

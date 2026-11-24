@@ -118,7 +118,7 @@ export default function DashboardPage() {
     { label: 'My Tasks', value: stats?.myTasks ?? 0, icon: ListTodo, gradient: 'from-amber-500/20 to-amber-600/10', iconBg: 'bg-amber-500/10 text-amber-500', ring: 'ring-amber-500/20' },
     { label: 'Open', value: stats?.openTasks ?? 0, icon: Circle, gradient: 'from-gray-500/20 to-gray-600/10', iconBg: 'bg-gray-500/10 text-gray-500', ring: 'ring-gray-500/20' },
     { label: 'In Progress', value: stats?.inProgressTasks ?? 0, icon: CircleDot, gradient: 'from-blue-500/20 to-indigo-600/10', iconBg: 'bg-blue-500/10 text-blue-500', ring: 'ring-blue-500/20' },
-    { label: 'Completed', value: stats?.completedTasks ?? 0, icon: CheckCircle2, gradient: 'from-green-500/20 to-emerald-600/10', iconBg: 'bg-green-500/10 text-green-500', ring: 'ring-green-500/20' },
+    { label: 'Dev Completed', value: stats?.completedTasks ?? 0, icon: CheckCircle2, gradient: 'from-green-500/20 to-emerald-600/10', iconBg: 'bg-green-500/10 text-green-500', ring: 'ring-green-500/20' },
     { label: 'Cancelled', value: stats?.cancelledTasks ?? 0, icon: CircleSlash, gradient: 'from-red-500/20 to-rose-600/10', iconBg: 'bg-red-500/10 text-red-500', ring: 'ring-red-500/20' },
   ];
 
