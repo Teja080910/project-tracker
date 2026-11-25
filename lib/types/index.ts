@@ -141,6 +141,7 @@ export interface TaskTestCase {
   id: string;
   task_id: string;
   title: string;
+  description: string | null;
   checked: boolean;
   checked_by: string | null;
   checked_at: string | null;

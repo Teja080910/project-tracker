@@ -23,6 +23,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import {
   Select,
   SelectContent,
@@ -136,6 +137,10 @@ export default function TaskDetailPage() {
   const [parentTask, setParentTask] = useState<Pick<Task, 'id' | 'number' | 'title'> | null>(null);
   const [testCases, setTestCases] = useState<TaskTestCase[]>([]);
   const [newTestCase, setNewTestCase] = useState('');
+  const [newTestCaseDescription, setNewTestCaseDescription] = useState('');
+  const [editingTestCase, setEditingTestCase] = useState<string | null>(null);
+  const [editTitleDraft, setEditTitleDraft] = useState('');
+  const [descriptionDraft, setDescriptionDraft] = useState('');
   const [subtaskTitle, setSubtaskTitle] = useState('');
   const [subtaskCreating, setSubtaskCreating] = useState(false);
   const [subtaskFormOpen, setSubtaskFormOpen] = useState(false);
@@ -1078,6 +1083,7 @@ export default function TaskDetailPage() {
     const { error } = await platform.from('task_test_cases').insert({
       task_id: taskId,
       title: newTestCase.trim(),
+      description: newTestCaseDescription.trim() || null,
       created_by: user.id,
     });
     if (error) {
@@ -1085,11 +1091,31 @@ export default function TaskDetailPage() {
       return;
     }
     setNewTestCase('');
+    setNewTestCaseDescription('');
     await fetchTestCases();
   };
 
+  const saveTestCaseEdit = async (testCase: TaskTestCase) => {
+    const title = editTitleDraft.trim();
+    if (!title) {
+      toast.error('Test case title is required');
+      return;
+    }
+    const { error } = await platform
+      .from('task_test_cases')
+      .update({ title, description: descriptionDraft.trim() || null })
+      .eq('id', testCase.id);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    setEditingTestCase(null);
+    await fetchTestCases();
+    toast.success('Test case updated');
+  };
+
   const deleteTestCase = async (testCase: TaskTestCase) => {
-    if (!user || (testCase.created_by !== user.id && !isGlobalAdmin(profile))) return;
+    if (!user) return;
     const { error } = await platform.from('task_test_cases').delete().eq('id', testCase.id);
     if (error) {
       toast.error(error.message);
@@ -1168,7 +1194,7 @@ export default function TaskDetailPage() {
     approvalStatus !== 'pending' &&
     (user?.id === task?.reporter_id || isProjectAdmin || isGlobalAdmin(profile));
   const allTestCasesChecked = testCases.length > 0 && testCases.every((tc) => tc.checked);
-  const canDeleteTestCase = (tc: TaskTestCase) =>
+  const canManageTestCase = (tc: TaskTestCase) =>
     !!user && (tc.created_by === user.id || isGlobalAdmin(profile));
   const backHref = task?.version
     ? `/app/projects/${task?.project?.slug ?? task?.project_id}/versions/${task.version.slug}`
@@ -2095,70 +2121,137 @@ export default function TaskDetailPage() {
               </span>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                <Input
-                  placeholder="Test case title..."
-                  value={newTestCase}
-                  onChange={(e) => setNewTestCase(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      addTestCase();
-                    }
-                  }}
+              <div className="space-y-2">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                  <Input
+                    placeholder="Test case title..."
+                    value={newTestCase}
+                    onChange={(e) => setNewTestCase(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        addTestCase();
+                      }
+                    }}
+                  />
+                  <Button size="sm" onClick={addTestCase} disabled={!user || !newTestCase.trim()}>
+                    Add
+                  </Button>
+                </div>
+                <Textarea
+                  placeholder="Description / end-to-end steps (optional)..."
+                  value={newTestCaseDescription}
+                  onChange={(e) => setNewTestCaseDescription(e.target.value)}
+                  rows={2}
+                  className="resize-y text-xs"
                 />
-                <Button size="sm" onClick={addTestCase} disabled={!user || !newTestCase.trim()}>
-                  Add
-                </Button>
               </div>
               {testCases.length === 0 ? (
                 <p className="py-2 text-center text-xs text-muted-foreground">
                   No test cases yet. Add the cases that must pass before testing is complete.
                 </p>
               ) : (
-                <div className="space-y-1.5">
+                <Accordion type="multiple" className="space-y-1.5">
                   {testCases.map((tc) => {
                     const checkedBy = tc.checked_by
                       ? members.find((m) => m.id === tc.checked_by)
                       : null;
                     return (
-                      <div
+                      <AccordionItem
                         key={tc.id}
-                        className="flex items-start gap-2.5 rounded-lg border border-border/50 px-3 py-2"
+                        value={tc.id}
+                        className="rounded-lg border border-border/50 px-3 data-[state=open]:bg-secondary/20"
                       >
-                        <Checkbox
-                          checked={tc.checked}
-                          onCheckedChange={() => toggleTestCase(tc)}
-                          disabled={!user}
-                          className="mt-0.5"
-                          aria-label={`Mark "${tc.title}" as checked`}
-                        />
-                        <div className="min-w-0 flex-1">
-                          <p className={cn('text-sm break-words', tc.checked && 'text-muted-foreground line-through')}>
-                            {tc.title}
-                          </p>
-                          {tc.checked && (
-                            <p className="text-[11px] text-muted-foreground">
-                              Checked by {checkedBy?.full_name ?? checkedBy?.email ?? 'unknown user'}
-                              {tc.checked_at ? ` · ${formatRelativeTime(tc.checked_at)}` : ''}
+                        <div className="flex items-start gap-2.5 py-2">
+                          <Checkbox
+                            checked={tc.checked}
+                            onCheckedChange={() => toggleTestCase(tc)}
+                            disabled={!user}
+                            className="mt-0.5"
+                            aria-label={`Mark "${tc.title}" as checked`}
+                          />
+                          <div className="min-w-0 flex-1">
+                            <p className={cn('text-sm break-words', tc.checked && 'text-muted-foreground line-through')}>
+                              {tc.title}
                             </p>
+                            {tc.checked && (
+                              <p className="text-[11px] text-muted-foreground">
+                                Checked by {checkedBy?.full_name ?? checkedBy?.email ?? 'unknown user'}
+                                {tc.checked_at ? ` · ${formatRelativeTime(tc.checked_at)}` : ''}
+                              </p>
+                            )}
+                          </div>
+                          {canManageTestCase(tc) && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
+                              onClick={() => deleteTestCase(tc)}
+                              aria-label="Delete test case"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
                           )}
+                          <AccordionTrigger
+                            className="!flex-none !justify-center !px-1 !py-0"
+                            aria-label={`Description for ${tc.title}`}
+                          />
                         </div>
-                        {canDeleteTestCase(tc) && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
-                            onClick={() => deleteTestCase(tc)}
-                            aria-label="Delete test case"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        )}
-                      </div>
+                        <AccordionContent className="pb-3 pl-8">
+                          {editingTestCase === tc.id ? (
+                            <div className="space-y-2">
+                              <Input
+                                value={editTitleDraft}
+                                onChange={(e) => setEditTitleDraft(e.target.value)}
+                                placeholder="Test case title"
+                                className="h-8 text-xs"
+                              />
+                              <Textarea
+                                value={descriptionDraft}
+                                onChange={(e) => setDescriptionDraft(e.target.value)}
+                                rows={4}
+                                placeholder="Describe the end-to-end steps and expected result..."
+                                className="text-xs"
+                              />
+                              <div className="flex gap-2">
+                                <Button size="sm" onClick={() => saveTestCaseEdit(tc)}>
+                                  Save
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setEditingTestCase(null)}
+                                >
+                                  Cancel
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="space-y-2">
+                              <p className="whitespace-pre-wrap text-xs text-muted-foreground">
+                                {tc.description || 'No description yet.'}
+                              </p>
+                              {canManageTestCase(tc) && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 px-1.5 text-[11px]"
+                                  onClick={() => {
+                                    setEditingTestCase(tc.id);
+                                    setEditTitleDraft(tc.title);
+                                    setDescriptionDraft(tc.description ?? '');
+                                  }}
+                                >
+                                  Edit
+                                </Button>
+                              )}
+                            </div>
+                          )}
+                        </AccordionContent>
+                      </AccordionItem>
                     );
                   })}
-                </div>
+                </Accordion>
               )}
               <p className="text-[11px] text-muted-foreground">
                 After development is complete and the task is in Testing, check every case before marking Testing Completed.
